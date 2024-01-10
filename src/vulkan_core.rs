@@ -6,12 +6,6 @@ use nobs_vk as vk;
 use crate::vulkan_core::vulkan_debug::debug_callback;
 
 
-struct QueueFamilyIndices {
-    graphics: u32,
-    compute: u32,
-    present: u32
-}
-
 fn make_version(major: u32, minor: u32, patch: u32) -> u32 { return (major << 22) | (minor << 12) | (patch); }
 fn make_api_version(variant: u32, major: u32, minor: u32, patch: u32) -> u32 {
     return (variant << 29) | (major << 22) | (minor << 12) | patch;
@@ -23,12 +17,15 @@ pub unsafe fn create_instance() -> u64 {
     let surface_extension: CString = CString::new("VK_KHR_surface").unwrap();
     let win32_surface_extension: CString = CString::new("VK_KHR_win32_surface").unwrap();
 
+    let p_application_name = CString::new("vulkan-rust-example").unwrap().as_ptr() as *const c_char;
+    let p_engine_name = CString::new("FexEngine_Rust_Variant").unwrap().as_ptr() as *const c_char;
+
     let app_info = vk::ApplicationInfo {
         sType: vk::STRUCTURE_TYPE_APPLICATION_INFO,
         pNext: null(),
-        pApplicationName: CString::new("vulkan-rust").unwrap().as_ptr(),
+        pApplicationName: p_application_name,
         applicationVersion: make_version(0, 0, 1),
-        pEngineName: CString::new("FexEngine_Rust_variant").unwrap().as_ptr(),
+        pEngineName: p_engine_name,
         engineVersion: make_version(0, 0, 1),
         apiVersion: make_api_version(0, 1, 2, 0)
     };
@@ -36,7 +33,7 @@ pub unsafe fn create_instance() -> u64 {
     let layers = vec![validation_layer]
         .iter().map(|e| e.as_ptr() as *const c_char).collect::<Vec<_>>();
 
-    let mut extensions = vec![debug_utils_extension, surface_extension, win32_surface_extension]
+    let extensions = vec![debug_utils_extension, surface_extension, win32_surface_extension]
         .iter().map(|e| e.as_ptr() as *const c_char).collect::<Vec<_>>();
 
     let mut debug_create_info: vk::DebugUtilsMessengerCreateInfoEXT = vk::DebugUtilsMessengerCreateInfoEXT {

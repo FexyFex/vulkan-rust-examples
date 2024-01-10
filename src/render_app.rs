@@ -1,10 +1,8 @@
-#[allow(
-    deprecated
-)]
+#![allow(deprecated, unused_variables, unused_tuple_struct_fields, dead_code)]
 
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
-use winit::raw_window_handle::{DisplayHandle, HasDisplayHandle, HasRawDisplayHandle, HasRawWindowHandle, HasWindowHandle, RawDisplayHandle, RawWindowHandle, WindowHandle};
+use winit::raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle, RawDisplayHandle, RawWindowHandle};
 use winit::window::WindowBuilder;
 use crate::vulkan_core::create_instance;
 
@@ -12,7 +10,7 @@ use crate::vulkan_core::create_instance;
 pub fn run_app() {
     let vklib = nobs_vk::VkLib::new();
     let window = unsafe { Window::new() };
-    let mut app = unsafe { RenderApp::new(window) };
+    let app = unsafe { RenderApp::new(window) };
 }
 
 
