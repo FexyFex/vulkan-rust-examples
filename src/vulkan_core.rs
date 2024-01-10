@@ -18,10 +18,10 @@ fn make_api_version(variant: u32, major: u32, minor: u32, patch: u32) -> u32 {
 }
 
 pub unsafe fn create_instance() -> u64 {
-    const VALIDATION_LAYER: CString = CString::new("VK_LAYER_KHRONOS_validation").unwrap();
-    const DEBUG_UTILS_EXTENSION: CString = CString::new("VK_EXT_debug_utils").unwrap();
-    const SURFACE_EXTENSION: CString = CString::new("VK_KHR_surface").unwrap();
-    const WIN32_SURFACE_EXTENSION: CString = CString::new("VK_KHR_win32_surface").unwrap();
+    let validation_layer: CString = CString::new("VK_LAYER_KHRONOS_validation").unwrap();
+    let debug_utils_extension: CString = CString::new("VK_EXT_debug_utils").unwrap();
+    let surface_extension: CString = CString::new("VK_KHR_surface").unwrap();
+    let win32_surface_extension: CString = CString::new("VK_KHR_win32_surface").unwrap();
 
     let app_info = vk::ApplicationInfo {
         sType: vk::STRUCTURE_TYPE_APPLICATION_INFO,
@@ -33,10 +33,10 @@ pub unsafe fn create_instance() -> u64 {
         apiVersion: make_api_version(0, 1, 2, 0)
     };
 
-    let layers = vec![VALIDATION_LAYER]
+    let layers = vec![validation_layer]
         .iter().map(|e| e.as_ptr() as *const c_char).collect::<Vec<_>>();
 
-    let mut extensions = vec![DEBUG_UTILS_EXTENSION, SURFACE_EXTENSION, WIN32_SURFACE_EXTENSION]
+    let mut extensions = vec![debug_utils_extension, surface_extension, win32_surface_extension]
         .iter().map(|e| e.as_ptr() as *const c_char).collect::<Vec<_>>();
 
     let mut debug_create_info: vk::DebugUtilsMessengerCreateInfoEXT = vk::DebugUtilsMessengerCreateInfoEXT {

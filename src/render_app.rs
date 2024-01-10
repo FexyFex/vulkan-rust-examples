@@ -1,11 +1,16 @@
+#[allow(
+    deprecated
+)]
+
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
-use winit::raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle, RawDisplayHandle, RawWindowHandle};
+use winit::raw_window_handle::{DisplayHandle, HasDisplayHandle, HasRawDisplayHandle, HasRawWindowHandle, HasWindowHandle, RawDisplayHandle, RawWindowHandle, WindowHandle};
 use winit::window::WindowBuilder;
 use crate::vulkan_core::create_instance;
 
 
 pub fn run_app() {
+    let vklib = nobs_vk::VkLib::new();
     let window = unsafe { Window::new() };
     let mut app = unsafe { RenderApp::new(window) };
 }
@@ -15,11 +20,10 @@ struct RenderApp {
     window: Window
 }
 impl RenderApp {
-    unsafe fn new(p_window: Window) -> Self {
-        window = p_window;
+    unsafe fn new(p_window: Window) -> RenderApp {
         let _instance: u64 = create_instance();
 
-        return Self;
+        return RenderApp { window: p_window };
     }
 
     unsafe fn render(&mut self, _window: &Window) {}
@@ -29,7 +33,7 @@ impl RenderApp {
     }
 }
 
-
+#[derive(Clone, Debug, Copy)]
 pub struct Window{
     pub window_handle: RawWindowHandle,
     pub display_handle: RawDisplayHandle,
@@ -37,7 +41,7 @@ pub struct Window{
 impl Window {
     unsafe fn new() -> Window {
         let event_loop = EventLoop::new().unwrap();
-        let window = WindowBuilder::new().build(&event_loop).unwrap();
+        let window = &WindowBuilder::new().build(&event_loop).unwrap();
 
         event_loop.set_control_flow(ControlFlow::Poll);
 
@@ -54,9 +58,9 @@ impl Window {
             }
         }).unwrap();
 
-        window_handle = window.raw_window_handle().unwrap();
-        display_handle = window.raw_display_handle().unwrap();
-
-        Ok(Self)
+        return Window {
+            window_handle: window.raw_window_handle().unwrap(),
+            display_handle: window.raw_display_handle().unwrap()
+        };
     }
 }
