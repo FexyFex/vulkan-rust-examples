@@ -31,7 +31,7 @@ impl RenderApp {
     }
 }
 
-#[derive(Clone, Debug, Copy)]
+
 pub struct Window{
     pub window_handle: RawWindowHandle,
     pub display_handle: RawDisplayHandle,
@@ -43,6 +43,7 @@ impl Window {
 
         event_loop.set_control_flow(ControlFlow::Poll);
 
+        /*
         event_loop.run(move |event, elwt| {
             match event {
                 Event::WindowEvent { event: WindowEvent::CloseRequested, .. } => {
@@ -55,10 +56,11 @@ impl Window {
                 _ => ()
             }
         }).unwrap();
+         */
 
         return Window {
             window_handle: window.raw_window_handle().unwrap(),
-            display_handle: window.raw_display_handle().unwrap()
+            display_handle: window.raw_display_handle().unwrap(),
         };
     }
 }

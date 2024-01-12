@@ -1,6 +1,7 @@
 #![allow(unused_variables)]
 
 use std::ffi::{c_void, CStr};
+use nobs_vk as vk;
 use nobs_vk::{Bool32, DebugUtilsMessageSeverityFlagBitsEXT, DebugUtilsMessageTypeFlagsEXT, DebugUtilsMessengerCallbackDataEXT};
 
 
@@ -13,6 +14,13 @@ pub extern "system" fn debug_callback(
     let data = unsafe { *p_data };
     let message = unsafe { CStr::from_ptr(data.pMessage) }.to_string_lossy();
 
-    println!("{}", message);
+    let severity = match message_severity {
+        vk::DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT => "INFO",
+        vk::DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT => "WARNING",
+        vk::DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT => "ERROR",
+        _ => ""
+    };
+
+    println!("{}: {}", severity, message);
     return Bool32::from(false);
 }

@@ -2,6 +2,7 @@ mod vulkan_debug;
 
 use std::ffi::{c_char, c_void, CString};
 use std::ptr::{null, null_mut};
+use std::str::FromStr;
 use nobs_vk as vk;
 use crate::vulkan_core::vulkan_debug::debug_callback;
 
@@ -17,19 +18,29 @@ pub unsafe fn create_instance() -> u64 {
     let surface_extension: CString = CString::new("VK_KHR_surface").unwrap();
     let win32_surface_extension: CString = CString::new("VK_KHR_win32_surface").unwrap();
 
-    let p_application_name = CString::new("vulkan-rust-example").unwrap().as_ptr() as *const c_char;
-    let p_engine_name = CString::new("FexEngine_Rust_Variant").unwrap().as_ptr() as *const c_char;
+    let p_application_name = CString::new("vulkan-rust-example").unwrap();
+    let p_engine_name = CString::new("FexEngine_Rust_Variant").unwrap();
 
     let app_info = vk::ApplicationInfo {
         sType: vk::STRUCTURE_TYPE_APPLICATION_INFO,
         pNext: null(),
-        pApplicationName: p_application_name,
+        pApplicationName: p_application_name.as_ptr(),
         applicationVersion: make_version(0, 0, 1),
-        pEngineName: p_engine_name,
+        pEngineName: p_engine_name.as_ptr(),
         engineVersion: make_version(0, 0, 1),
         apiVersion: make_api_version(0, 1, 2, 0)
     };
 
+    let arr: [i8; 256] = [0; 256];
+    let mut layer_count: u32 = 0;
+    vk::EnumerateInstanceLayerProperties(&mut layer_count, null_mut());
+    let mut available_layers = vk::LayerProperties {
+        layerName: arr,
+        specVersion: 0,
+        implementationVersion: 0,
+        description: arr,
+    };
+    vk::EnumerateInstanceLayerProperties(&mut layer_count, &mut available_layers);
     let layers = vec![validation_layer]
         .iter().map(|e| e.as_ptr() as *const c_char).collect::<Vec<_>>();
 
