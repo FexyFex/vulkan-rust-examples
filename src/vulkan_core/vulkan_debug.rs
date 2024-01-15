@@ -1,26 +1,25 @@
 #![allow(unused_variables)]
 
 use std::ffi::{c_void, CStr};
-use nobs_vk as vk;
-use nobs_vk::{Bool32, DebugUtilsMessageSeverityFlagBitsEXT, DebugUtilsMessageTypeFlagsEXT, DebugUtilsMessengerCallbackDataEXT};
+use vulkan_raw::*;
 
 
-pub extern "system" fn debug_callback(
-    message_severity: DebugUtilsMessageSeverityFlagBitsEXT,
-    message_types: DebugUtilsMessageTypeFlagsEXT,
-    p_data: *const DebugUtilsMessengerCallbackDataEXT,
+pub extern "C" fn debug_callback(
+    message_severity: VkDebugUtilsMessageSeverityFlagBitsEXT,
+    message_types: VkDebugUtilsMessageTypeFlagsEXT,
+    p_data: *const VkDebugUtilsMessengerCallbackDataEXT,
     p_user_data: *mut c_void
-) -> Bool32 {
-    let data = unsafe { *p_data };
-    let message = unsafe { CStr::from_ptr(data.pMessage) }.to_string_lossy();
+) -> VkBool32 {
+    let p_message = unsafe { (*p_data).pMessage };
+    let message = unsafe { CStr::from_ptr(p_message) }.to_string_lossy();
 
     let severity = match message_severity {
-        vk::DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT => "INFO",
-        vk::DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT => "WARNING",
-        vk::DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT => "ERROR",
+        VkDebugUtilsMessageSeverityFlagBitsEXT::INFO_BIT_EXT => "INFO",
+        VkDebugUtilsMessageSeverityFlagBitsEXT::WARNING_BIT_EXT => "WARNING",
+        VkDebugUtilsMessageSeverityFlagBitsEXT::ERROR_BIT_EXT => "ERROR",
         _ => ""
     };
 
     println!("{}: {}", severity, message);
-    return Bool32::from(false);
+    return VkBool32::FALSE;
 }

@@ -1,14 +1,15 @@
 #![allow(deprecated, unused_variables, unused_tuple_struct_fields, dead_code)]
 
+use vulkan_raw::VkInstance;
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle, RawDisplayHandle, RawWindowHandle};
 use winit::window::WindowBuilder;
-use crate::vulkan_core::create_instance;
+use crate::vulkan_core;
+use crate::vulkan_core::VulkanCore;
 
 
 pub fn run_app() {
-    let vklib = nobs_vk::VkLib::new();
     let window = unsafe { Window::new() };
     let app = unsafe { RenderApp::new(window) };
 }
@@ -19,7 +20,7 @@ struct RenderApp {
 }
 impl RenderApp {
     unsafe fn new(p_window: Window) -> RenderApp {
-        let _instance: u64 = create_instance();
+        let _core: VulkanCore = vulkan_core::initialize();
 
         return RenderApp { window: p_window };
     }
@@ -43,7 +44,6 @@ impl Window {
 
         event_loop.set_control_flow(ControlFlow::Poll);
 
-        /*
         event_loop.run(move |event, elwt| {
             match event {
                 Event::WindowEvent { event: WindowEvent::CloseRequested, .. } => {
@@ -56,7 +56,6 @@ impl Window {
                 _ => ()
             }
         }).unwrap();
-         */
 
         return Window {
             window_handle: window.raw_window_handle().unwrap(),
