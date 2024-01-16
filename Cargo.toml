@@ -6,5 +6,6 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-vulkan_raw = "0.1.9"
-winit = "0.29.9"
+vulkan_raw = { version = "0.1.8", features = ["VK_KHR_win32_surface", "VK_KHR_surface", "VK_KHR_swapchain", "VK_VERSION_1_3"] }
+winit = "0.28"
+colored = "2.1.0"

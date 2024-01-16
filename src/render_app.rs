@@ -1,65 +1,52 @@
-#![allow(deprecated, unused_variables, unused_tuple_struct_fields, dead_code)]
-
-use vulkan_raw::VkInstance;
-use winit::event::{Event, WindowEvent};
+use winit::event::Event;
 use winit::event_loop::{ControlFlow, EventLoop};
-use winit::raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle, RawDisplayHandle, RawWindowHandle};
+use winit::platform::windows::{WindowExtWindows};
 use winit::window::WindowBuilder;
-use crate::vulkan_core;
-use crate::vulkan_core::VulkanCore;
+
+
+static DESIRED_FPS: f64 = 144.0;
 
 
 pub fn run_app() {
-    let window = unsafe { Window::new() };
-    let app = unsafe { RenderApp::new(window) };
+    let event_loop = EventLoop::new();
+    let winit_window = &WindowBuilder::new()
+        .with_title("Vulkan Stuff")
+        .with_resizable(true)
+        .build(&event_loop).unwrap();
+
+    let window = Window { hinstance: winit_window.hinstance(), hwnd: winit_window.hwnd(), closed: false };
+
+    event_loop.run(|event, _, control_flow| {
+        *control_flow = ControlFlow::Poll;
+
+        match event {
+            Event::WindowEvent { event, .. } => match event {
+                winit::event::WindowEvent::CloseRequested => {
+                    destroy();
+                    *control_flow = ControlFlow::ExitWithCode(0);
+                }
+
+                winit::event::WindowEvent::KeyboardInput { input, .. } => {
+                    match input.virtual_keycode.unwrap() {
+                        winit::event::VirtualKeyCode::Escape => *control_flow = ControlFlow::ExitWithCode(0),
+                        _ => ()
+                    }
+                }
+                _ => ()
+            }
+            _ => ()
+        };
+    });
 }
 
-
-struct RenderApp {
-    window: Window
-}
-impl RenderApp {
-    unsafe fn new(p_window: Window) -> RenderApp {
-        let _core: VulkanCore = vulkan_core::initialize();
-
-        return RenderApp { window: p_window };
-    }
-
-    unsafe fn render(&mut self, _window: &Window) {}
-
-    unsafe fn destroy(&mut self) {
-
-    }
+fn destroy() {
+    println!("Goodbye");
 }
 
 
 pub struct Window{
-    pub window_handle: RawWindowHandle,
-    pub display_handle: RawDisplayHandle,
-}
-impl Window {
-    unsafe fn new() -> Window {
-        let event_loop = EventLoop::new().unwrap();
-        let window = &WindowBuilder::new().build(&event_loop).unwrap();
+    pub hinstance: isize,
+    pub hwnd: isize,
 
-        event_loop.set_control_flow(ControlFlow::Poll);
-
-        event_loop.run(move |event, elwt| {
-            match event {
-                Event::WindowEvent { event: WindowEvent::CloseRequested, .. } => {
-                    println!("Closing the Application");
-                    elwt.exit();
-                },
-                Event::AboutToWait => {
-                    window.request_redraw();
-                },
-                _ => ()
-            }
-        }).unwrap();
-
-        return Window {
-            window_handle: window.raw_window_handle().unwrap(),
-            display_handle: window.raw_display_handle().unwrap(),
-        };
-    }
+    pub closed: bool
 }

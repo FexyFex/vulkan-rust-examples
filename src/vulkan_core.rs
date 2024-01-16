@@ -1,26 +1,12 @@
 mod vulkan_debug;
+pub(crate) mod vulkan_surface;
+mod buffer_factory;
 
 use std::ffi::{c_char, c_void, CStr, CString};
 use std::ptr::{null, null_mut};
 use std::str::FromStr;
 use vulkan_raw::*;
 use crate::vulkan_core::vulkan_debug::debug_callback;
-
-
-pub struct VulkanCore {
-    pub instance: VkInstance,
-    pub physical_device: VkPhysicalDevice,
-    pub device: VkDevice
-}
-
-
-pub fn initialize() -> VulkanCore {
-    let instance = create_instance();
-    let physical_device = create_physical_device(instance);
-    let device = create_device(instance);
-
-    return VulkanCore { instance, physical_device, device }
-}
 
 
 fn make_version(major: u32, minor: u32, patch: u32) -> u32 {
@@ -30,7 +16,19 @@ fn make_api_version(variant: u32, major: u32, minor: u32, patch: u32) -> u32 {
     return (variant << 29) | (major << 22) | (minor << 12) | patch;
 }
 
-fn create_instance() -> VkInstance {
+
+pub struct Instance {
+    pub handle: VkInstance
+}
+
+impl Instance {
+    fn destroy(&self) {
+        let lib = InstanceLevelFunctions::load_from_instance(self.handle);
+        unsafe { lib.vkDestroyInstance(self.handle, null()) };
+    }
+}
+
+pub fn create_instance() -> Instance {
     let p_application_name = CString::new("vulkan-rust-example").unwrap();
     let p_engine_name = CString::new("FexEngine_Rust_Variant").unwrap();
 
@@ -71,14 +69,14 @@ fn create_instance() -> VkInstance {
         ppEnabledExtensionNames: extensions.as_ptr(),
     };
 
-    let mut instance: VkInstance = VkInstance::none();
-    unsafe { vkCreateInstance(&instance_create_info, null(), &mut instance) };
+    let mut instance_handle: VkInstance = VkInstance::none();
+    unsafe { vkCreateInstance(&instance_create_info, null(), &mut instance_handle) };
 
-    return instance;
+    return Instance { handle: instance_handle };
 }
 
 
-fn create_physical_device(instance: VkInstance) -> VkPhysicalDevice {
+pub fn create_physical_device(instance: Instance) -> VkPhysicalDevice {
     let lib = InstanceLevelFunctions::load_from_instance(instance);
 
     let mut physical_devices_count: u32 = 0;
@@ -99,9 +97,55 @@ fn create_physical_device(instance: VkInstance) -> VkPhysicalDevice {
 }
 
 
-fn create_device(instance: VkInstance) -> VkDevice {
-    let mut device = VkDevice::none();
+pub struct Device {
+    pub handle: VkDevice,
+    instance: VkInstance
+}
 
-    return device;
+impl Device {
+    fn destroy(&self) {
+        let lib_instance = InstanceLevelFunctions::load_from_instance(self.instance);
+        let lib_device = DeviceLevelFunctions::load_from_device(&lib_instance, self.handle);
+        unsafe { lib_device.vkDestroyDevice(self.handle, null()) };
+    }
+}
+
+pub fn create_device(instance: VkInstance, physical_device: VkPhysicalDevice) -> Device {
+    let lib = InstanceLevelFunctions::load_from_instance(instance);
+
+    let queue_count = 1;
+    let queue_priority: f32 = 1.0;
+    let mut queue_create_infos: Vec<VkDeviceQueueCreateInfo> = Vec::with_capacity(queue_count);
+    for i in 0..queue_count {
+        let create_info = VkDeviceQueueCreateInfo {
+            sType: VkStructureType::DEVICE_QUEUE_CREATE_INFO,
+            pNext: null(),
+            flags: VkDeviceQueueCreateFlagBits::empty(),
+            queueFamilyIndex: 0,
+            queueCount: 1,
+            pQueuePriorities: &queue_priority,
+        };
+
+        queue_create_infos[i] = create_info
+    }
+    unsafe { queue_create_infos.set_len(queue_count) };
+
+    let device_create_info = VkDeviceCreateInfo {
+        sType: VkStructureType::DEVICE_CREATE_INFO,
+        pNext: null(),
+        flags: VkDeviceCreateFlags::empty(),
+        queueCreateInfoCount: queue_count as u32,
+        pQueueCreateInfos: queue_create_infos.as_ptr(),
+        enabledLayerCount: 0,
+        ppEnabledLayerNames: null(),
+        enabledExtensionCount: 0,
+        ppEnabledExtensionNames: null(),
+        pEnabledFeatures: null(),
+    };
+
+    let mut device_handle = VkDevice::none();
+    unsafe { lib.vkCreateDevice(physical_device, &device_create_info, null(), &mut device_handle) };
+
+    return Device { handle: device_handle, instance };
 }
 
