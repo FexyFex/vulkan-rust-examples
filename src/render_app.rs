@@ -2,9 +2,7 @@ use winit::event::Event;
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::platform::windows::{WindowExtWindows};
 use winit::window::WindowBuilder;
-
-
-static DESIRED_FPS: f64 = 144.0;
+use crate::vulkan_render_base::initialize_vulkan;
 
 
 pub fn run_app() {
@@ -15,6 +13,7 @@ pub fn run_app() {
         .build(&event_loop).unwrap();
 
     let window = Window { hinstance: winit_window.hinstance(), hwnd: winit_window.hwnd(), closed: false };
+    let _base = initialize_vulkan(window);
 
     event_loop.run(|event, _, control_flow| {
         *control_flow = ControlFlow::Poll;

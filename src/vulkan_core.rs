@@ -1,10 +1,10 @@
-mod vulkan_debug;
+#![allow(dead_code)]
+
 pub(crate) mod vulkan_surface;
-mod buffer_factory;
+mod vulkan_debug;
 
 use std::ffi::{c_char, c_void, CStr, CString};
 use std::ptr::{null, null_mut};
-use std::str::FromStr;
 use vulkan_raw::*;
 use crate::vulkan_core::vulkan_debug::debug_callback;
 
@@ -42,11 +42,17 @@ pub fn create_instance() -> Instance {
         apiVersion: make_api_version(0, 1, 2, 0),
     };
 
-    let layers = vec!["VK_LAYER_KHRONOS_validation"]
-        .iter().map(|e| e.as_ptr() as *const c_char).collect::<Vec<_>>();
+    let mut layer_count: u32 = 0;
+    unsafe { vkEnumerateInstanceLayerProperties(&mut layer_count, null_mut()) };
+    let mut layers: Vec<VkLayerProperties> = Vec::with_capacity(layer_count as usize);
+    unsafe { vkEnumerateInstanceLayerProperties(&mut layer_count, layers.as_mut_ptr()) };
+    unsafe { layers.set_len(layer_count as usize) };
 
-    let extensions = vec!["VK_EXT_debug_utils"]
-        .iter().map(|e| e.as_ptr() as *const c_char).collect::<Vec<_>>();
+    //let layers = vec!["VK_LAYER_KHRONOS_validation"]
+    //    .iter().map(|e| e.as_ptr() as *const c_char).collect::<Vec<*const c_char>>();
+
+    let extensions = vec!["VK_EXT_debug_utils", "VK_KHR_surface", "VK_KHR_win32_surface"]
+        .iter().map(|e| e.as_ptr() as *const c_char).collect::<Vec<*const c_char>>();
 
     let mut debug_create_info: VkDebugUtilsMessengerCreateInfoEXT = VkDebugUtilsMessengerCreateInfoEXT {
         sType: VkStructureType::DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
@@ -58,14 +64,16 @@ pub fn create_instance() -> Instance {
         pUserData: null_mut(),
     };
 
+    let layer_count = layers.len() as u32;
+    let extension_count = extensions.len() as u32;
     let instance_create_info = VkInstanceCreateInfo {
         sType: VkStructureType::INSTANCE_CREATE_INFO,
         pNext: &mut debug_create_info as *mut _ as *mut c_void,
         flags: VkInstanceCreateFlagBits::all(),
         pApplicationInfo: &app_info,
-        enabledLayerCount: layers.len() as u32,
-        ppEnabledLayerNames: layers.as_ptr(),
-        enabledExtensionCount: extensions.len() as u32,
+        enabledLayerCount: layer_count,
+        ppEnabledLayerNames: null(),//layers.as_ptr(),
+        enabledExtensionCount: extension_count,
         ppEnabledExtensionNames: extensions.as_ptr(),
     };
 
@@ -76,13 +84,13 @@ pub fn create_instance() -> Instance {
 }
 
 
-pub fn create_physical_device(instance: Instance) -> VkPhysicalDevice {
-    let lib = InstanceLevelFunctions::load_from_instance(instance);
+pub fn create_physical_device(instance: *const Instance) -> VkPhysicalDevice {
+    let lib = unsafe { InstanceLevelFunctions::load_from_instance((*instance).handle) };
 
     let mut physical_devices_count: u32 = 0;
-    unsafe { lib.vkEnumeratePhysicalDevices(instance, &mut physical_devices_count, null_mut()) };
+    unsafe { lib.vkEnumeratePhysicalDevices((*instance).handle, &mut physical_devices_count, null_mut()) };
     let mut physical_devices: Vec<VkPhysicalDevice> = Vec::with_capacity(physical_devices_count as usize);
-    unsafe { lib.vkEnumeratePhysicalDevices(instance, &mut physical_devices_count, physical_devices.as_mut_ptr()) };
+    unsafe { lib.vkEnumeratePhysicalDevices((*instance).handle, &mut physical_devices_count, physical_devices.as_mut_ptr()) };
     unsafe { physical_devices.set_len(physical_devices_count as usize) }; // not sure why this is needed but it is...
 
     // TODO: Choose a VkPhysicalDevice based on their properties and available features
@@ -110,8 +118,8 @@ impl Device {
     }
 }
 
-pub fn create_device(instance: VkInstance, physical_device: VkPhysicalDevice) -> Device {
-    let lib = InstanceLevelFunctions::load_from_instance(instance);
+pub fn create_device(instance: *const Instance, physical_device: VkPhysicalDevice) -> Device {
+    let lib = unsafe { InstanceLevelFunctions::load_from_instance((*instance).handle) };
 
     let queue_count = 1;
     let queue_priority: f32 = 1.0;
@@ -146,6 +154,6 @@ pub fn create_device(instance: VkInstance, physical_device: VkPhysicalDevice) ->
     let mut device_handle = VkDevice::none();
     unsafe { lib.vkCreateDevice(physical_device, &device_create_info, null(), &mut device_handle) };
 
-    return Device { handle: device_handle, instance };
+    return Device { handle: device_handle, instance: unsafe { (*instance).handle } };
 }
 
