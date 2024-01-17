@@ -1,10 +1,12 @@
 #![allow(dead_code)]
 
 pub(crate) mod vulkan_surface;
-mod vulkan_debug;
+pub mod vulkan_debug;
+pub mod vulkan_swapchain;
 
 use std::ffi::{c_void, CStr, CString};
 use std::iter::Iterator;
+use std::ops::BitOr;
 use std::ptr::{null, null_mut};
 use vulkan_raw::*;
 use crate::vulkan_core::vulkan_debug::debug_callback;
@@ -147,9 +149,9 @@ pub fn create_physical_device(instance: Instance) -> VkPhysicalDevice {
 
 #[derive(Copy, Clone)]
 pub struct QueueFamily {
-    index: u32,
-    flags: u32,
-    present_supported: bool
+    pub index: u32,
+    pub flags: VkQueueFlagBits,
+    pub present_supported: bool
 }
 
 pub fn get_unique_queue_families(instance: Instance, surface: Surface, physical_device: VkPhysicalDevice)-> Vec<QueueFamily> {
@@ -166,10 +168,10 @@ pub fn get_unique_queue_families(instance: Instance, surface: Surface, physical_
 
     for i in 0..queue_family_count {
         let properties: &VkQueueFamilyProperties = queue_families_props.get(i as usize).unwrap();
-        let mut queue_flags: u32 = 0;
+        let mut queue_flags: VkQueueFlagBits = VkQueueFlagBits::empty();
 
         for target_flag in relevant_flags {
-            if properties.queueFlags & target_flag == target_flag { queue_flags = queue_flags | target_flag.bits() }
+            if properties.queueFlags.contains(target_flag) { queue_flags = queue_flags.bitor(target_flag) }
         }
 
         let mut present_support = VkBool32::from(false);
