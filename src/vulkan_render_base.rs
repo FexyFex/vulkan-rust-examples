@@ -2,7 +2,7 @@
 
 use crate::render_app::Window;
 use crate::vulkan_core;
-use crate::vulkan_core::{create_device, create_physical_device};
+use crate::vulkan_core::{create_device, create_physical_device, get_unique_queue_families};
 use crate::vulkan_core::vulkan_surface::vulkan_surface::create_surface;
 
 pub struct FramePreparation {
@@ -23,9 +23,10 @@ pub struct VulkanRenderBase {
 
 pub fn initialize_vulkan(window: Window) -> VulkanRenderBase {
     let instance = vulkan_core::create_instance();
-    let _surface = create_surface(&instance, window);
-    let physical_device = create_physical_device(&instance);
-    let _device = create_device(&instance, physical_device);
+    let surface = create_surface(instance, window);
+    let physical_device = create_physical_device(instance);
+    let unique_queue_families = get_unique_queue_families(instance, surface, physical_device);
+    let _device = create_device(instance, physical_device, unique_queue_families);
 
     return VulkanRenderBase {  };
 }
@@ -37,4 +38,3 @@ pub fn prepare_frame() -> FramePreparation {
 pub fn submit_frame(submit_data: FrameSubmitData) {
     if !submit_data.do_submit { return };
 }
-

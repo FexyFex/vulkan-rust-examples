@@ -4,6 +4,7 @@ pub mod vulkan_surface {
     use crate::render_app::Window;
     use crate::vulkan_core::Instance;
 
+    #[derive(Copy, Clone)]
     pub struct Surface {
         pub handle: VkSurfaceKHR,
         instance: VkInstance
@@ -16,8 +17,8 @@ pub mod vulkan_surface {
         }
     }
 
-    pub fn create_surface(instance: *const Instance, window: Window) -> Surface {
-        let lib = unsafe { InstanceLevelFunctions::load_from_instance((*instance).handle) };
+    pub fn create_surface(instance: Instance, window: Window) -> Surface {
+        let lib = InstanceLevelFunctions::load_from_instance(instance.handle);
 
         let create_info = VkWin32SurfaceCreateInfoKHR {
             sType: VkStructureType::WIN32_SURFACE_CREATE_INFO_KHR,
@@ -27,11 +28,9 @@ pub mod vulkan_surface {
             hwnd: window.hwnd as usize,
         };
 
-        //let create_func_name = CString::new("vkCreateWin32SurfaceKHR").unwrap();
-        //let create_func = unsafe { vkGetInstanceProcAddr((*instance).handle, create_func_name.as_ptr()) };
         let mut surface_handle = VkSurfaceKHR::none();
-        unsafe { lib.vkCreateWin32SurfaceKHR((*instance).handle, &create_info, null(), &mut surface_handle) };
+        unsafe { lib.vkCreateWin32SurfaceKHR(instance.handle, &create_info, null(), &mut surface_handle) };
 
-        return Surface { handle: surface_handle, instance: unsafe { (*instance).handle } };
+        return Surface { handle: surface_handle, instance: instance.handle };
     }
 }
