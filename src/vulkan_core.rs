@@ -3,10 +3,14 @@
 pub(crate) mod vulkan_surface;
 mod vulkan_debug;
 
-use std::ffi::{c_char, c_void, CStr, CString};
+use std::ffi::{c_void, CStr, CString};
 use std::ptr::{null, null_mut};
 use vulkan_raw::*;
 use crate::vulkan_core::vulkan_debug::debug_callback;
+
+
+const REQUIRED_LAYERS: [&str; 1] = ["VK_LAYER_KHRONOS_validation"];
+const REQUIRED_EXTENSIONS: [&str; 3] = ["VK_EXT_debug_utils", "VK_KHR_surface", "VK_KHR_win32_surface"];
 
 
 fn make_version(major: u32, minor: u32, patch: u32) -> u32 {
@@ -47,12 +51,31 @@ pub fn create_instance() -> Instance {
     let mut layers: Vec<VkLayerProperties> = Vec::with_capacity(layer_count as usize);
     unsafe { vkEnumerateInstanceLayerProperties(&mut layer_count, layers.as_mut_ptr()) };
     unsafe { layers.set_len(layer_count as usize) };
+    let layer_readable_names = layers.iter()
+        .map(|e| unsafe { CStr::from_ptr(e.layerName.as_ptr()).to_str().unwrap() })
+        .collect::<Vec<_>>();
+    for layer_name in REQUIRED_LAYERS {
+        if !layer_readable_names.contains(&layer_name) { println!("MISSING LAYER: {}", layer_name) }
+    }
+    let layer_c_names = layers.iter()
+        .filter(|e| REQUIRED_LAYERS.contains(&unsafe { CStr::from_ptr(e.layerName.as_ptr()).to_str().unwrap() }))
+        .map(|e| e.layerName.as_ptr())
+        .collect::<Vec<_>>();
 
-    //let layers = vec!["VK_LAYER_KHRONOS_validation"]
-    //    .iter().map(|e| e.as_ptr() as *const c_char).collect::<Vec<*const c_char>>();
-
-    let extensions = vec!["VK_EXT_debug_utils", "VK_KHR_surface", "VK_KHR_win32_surface"]
-        .iter().map(|e| e.as_ptr() as *const c_char).collect::<Vec<*const c_char>>();
+    let mut extension_count: u32 = 0;
+    unsafe { vkEnumerateInstanceExtensionProperties(null(), &mut extension_count, null_mut()) };
+    let mut extensions: Vec<VkExtensionProperties> = Vec::with_capacity(extension_count as usize);
+    unsafe { vkEnumerateInstanceExtensionProperties(null(), &mut extension_count, extensions.as_mut_ptr()) };
+    let extension_readable_names = extensions.iter()
+        .map(|e| unsafe { CStr::from_ptr(e.extensionName.as_ptr()).to_str().unwrap() })
+        .collect::<Vec<_>>();
+    for extension_name in REQUIRED_EXTENSIONS {
+        if !extension_readable_names.contains(&extension_name) { println!("MISSING EXTENSION: {}", extension_name) }
+    }
+    let extension_c_names = extensions.iter()
+        .filter(|e| REQUIRED_EXTENSIONS.contains(&unsafe { CStr::from_ptr(e.extensionName.as_ptr()).to_str().unwrap() }))
+        .map(|e| e.extensionName.as_ptr())
+        .collect::<Vec<_>>();
 
     let mut debug_create_info: VkDebugUtilsMessengerCreateInfoEXT = VkDebugUtilsMessengerCreateInfoEXT {
         sType: VkStructureType::DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
@@ -72,9 +95,9 @@ pub fn create_instance() -> Instance {
         flags: VkInstanceCreateFlagBits::all(),
         pApplicationInfo: &app_info,
         enabledLayerCount: layer_count,
-        ppEnabledLayerNames: null(),//layers.as_ptr(),
+        ppEnabledLayerNames: layer_c_names.as_ptr(),
         enabledExtensionCount: extension_count,
-        ppEnabledExtensionNames: extensions.as_ptr(),
+        ppEnabledExtensionNames: extension_c_names.as_ptr(),
     };
 
     let mut instance_handle: VkInstance = VkInstance::none();

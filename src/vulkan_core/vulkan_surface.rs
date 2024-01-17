@@ -1,5 +1,4 @@
 pub mod vulkan_surface {
-    use std::ffi::{CStr, CString};
     use std::ptr::null;
     use vulkan_raw::*;
     use crate::render_app::Window;
@@ -28,6 +27,8 @@ pub mod vulkan_surface {
             hwnd: window.hwnd as usize,
         };
 
+        //let create_func_name = CString::new("vkCreateWin32SurfaceKHR").unwrap();
+        //let create_func = unsafe { vkGetInstanceProcAddr((*instance).handle, create_func_name.as_ptr()) };
         let mut surface_handle = VkSurfaceKHR::none();
         unsafe { lib.vkCreateWin32SurfaceKHR((*instance).handle, &create_info, null(), &mut surface_handle) };
 
