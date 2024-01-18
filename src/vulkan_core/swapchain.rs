@@ -2,7 +2,7 @@ use std::ptr::{null, null_mut};
 use vulkan_raw::*;
 use crate::util::image_extent::ImageExtent;
 use crate::vulkan_core::{Device, Instance, QueueFamily};
-use crate::vulkan_core::vulkan_surface::vulkan_surface::Surface;
+use crate::vulkan_core::surface::vulkan_surface::Surface;
 
 
 pub struct Swapchain {
@@ -23,7 +23,7 @@ impl Swapchain {
 
 
 const PREFERRED_COLOR_SPACE: VkColorSpaceKHR = VkColorSpaceKHR::SRGB_NONLINEAR_KHR;
-const PREFERRED_IMAGE_FORMAT: VkFormat = VkFormat::B8G8R8A8_SRGB;
+const PREFERRED_IMAGE_FORMATS: [VkFormat; 2] = [VkFormat::B8G8R8A8_SRGB, VkFormat::R8G8B8A8_SRGB];
 const PREFERRED_PRESENT_MODE: VkPresentModeKHR = VkPresentModeKHR::MAILBOX_KHR;
 
 
@@ -61,6 +61,7 @@ pub fn create_swapchain(
             formats.as_mut_ptr()
         )
     };
+    unsafe {formats.set_len(format_count as usize) };
 
     let mut present_mode_count: u32 = 0;
     unsafe {
@@ -80,12 +81,14 @@ pub fn create_swapchain(
             present_modes.as_mut_ptr()
         )
     };
+    unsafe { present_modes.set_len(present_mode_count as usize) };
 
     let mut queue_family_indices: Vec<u32> = Vec::new();
     let mut image_sharing_mode = VkSharingMode::EXCLUSIVE;
     if graphics_queue_family.index != present_queue_family.index {
         queue_family_indices.push(present_queue_family.index);
         queue_family_indices.push(graphics_queue_family.index);
+        image_sharing_mode = VkSharingMode::CONCURRENT;
     }
 
     let mut pre_transform = capabilities.currentTransform;
@@ -93,7 +96,7 @@ pub fn create_swapchain(
         pre_transform = VkSurfaceTransformFlagBitsKHR::IDENTITY_BIT_KHR;
     }
 
-    let surface_format = choose_surface_format(formats);
+    let surface_format = choose_surface_format(&formats);
     let present_mode = choose_present_mode(present_modes);
 
     let swapchain_create_info = VkSwapchainCreateInfoKHR {
@@ -121,22 +124,22 @@ pub fn create_swapchain(
     unsafe { lib_device.vkCreateSwapchainKHR(device.handle, &swapchain_create_info, null(), &mut swapchain_handle) };
 
     let images = create_images(device, swapchain_handle, &lib_device);
-    let image_views = create_image_views(device, images, surface_format.format, &lib_device);
+    let image_views = create_image_views(device, &images, surface_format.format, &lib_device);
 
     return Swapchain {
         handle: swapchain_handle,
         extent,
-        images: images.clone(),
-        image_views: image_views.clone(),
+        images,
+        image_views,
         instance,
         device
     }
 }
 
 
-fn choose_surface_format(formats: Vec<VkSurfaceFormatKHR>) -> VkSurfaceFormatKHR {
+fn choose_surface_format(formats: &Vec<VkSurfaceFormatKHR>) -> &VkSurfaceFormatKHR {
     for format in formats {
-        if format.colorSpace == PREFERRED_COLOR_SPACE && format.format == PREFERRED_IMAGE_FORMAT {
+        if format.colorSpace == PREFERRED_COLOR_SPACE && PREFERRED_IMAGE_FORMATS.contains(&format.format) {
             return format;
         }
     }
@@ -146,13 +149,13 @@ fn choose_surface_format(formats: Vec<VkSurfaceFormatKHR>) -> VkSurfaceFormatKHR
 fn choose_present_mode(all_modes: Vec<VkPresentModeKHR>) -> VkPresentModeKHR {
     let mut current_best_mode = VkPresentModeKHR::FIFO_KHR;
     for present_mode in all_modes {
-        if (present_mode == PREFERRED_PRESENT_MODE) { return present_mode; }
-        if (present_mode == VkPresentModeKHR::FIFO_RELAXED_KHR) { current_best_mode = present_mode; }
+        if present_mode == PREFERRED_PRESENT_MODE { return present_mode; }
+        if present_mode == VkPresentModeKHR::FIFO_RELAXED_KHR { current_best_mode = present_mode; }
     }
     return current_best_mode;
 }
 
-fn create_images(device: Device, swapchain_handle: VkSwapchainKHR, device_lib: *const DeviceLevelFunctions) -> Vec<VkImage> {
+fn create_images(device: Device, swapchain_handle: VkSwapchainKHR, device_lib: &DeviceLevelFunctions) -> Vec<VkImage> {
     let mut image_count: u32 = 0;
     unsafe { (*device_lib).vkGetSwapchainImagesKHR(device.handle, swapchain_handle, &mut image_count, null_mut()) };
     let mut images = Vec::with_capacity(image_count as usize);
@@ -162,34 +165,30 @@ fn create_images(device: Device, swapchain_handle: VkSwapchainKHR, device_lib: *
     return images;
 }
 
-fn create_image_views(device: Device, images: Vec<VkImage>, color_format: VkFormat, device_lib: *const DeviceLevelFunctions) -> Vec<VkImageView> {
+fn create_image_views(device: Device, images: &Vec<VkImage>, color_format: VkFormat, device_lib: &DeviceLevelFunctions) -> Vec<VkImageView> {
     let mut image_views: Vec<VkImageView> = Vec::new();
-
-    let component_mapping = VkComponentMapping {
-        r: VkComponentSwizzle::IDENTITY,
-        g: VkComponentSwizzle::IDENTITY,
-        b: VkComponentSwizzle::IDENTITY,
-        a: VkComponentSwizzle::IDENTITY,
-    };
-
-    let subresource_range = VkImageSubresourceRange {
-        aspectMask: VkImageAspectFlagBits::COLOR_BIT,
-        baseMipLevel: 0,
-        levelCount: 1,
-        baseArrayLayer: 0,
-        layerCount: 1
-    };
 
     for current_image in images {
         let image_view_info = VkImageViewCreateInfo {
             sType: VkStructureType::IMAGE_VIEW_CREATE_INFO,
             pNext: null(),
             flags: VkImageViewCreateFlagBits::empty(),
-            image: current_image,
+            image: *current_image,
             viewType: VkImageViewType::IVT_2D,
             format: color_format,
-            components: component_mapping.clone(),
-            subresourceRange: subresource_range.clone()
+            components: VkComponentMapping {
+                r: VkComponentSwizzle::IDENTITY,
+                g: VkComponentSwizzle::IDENTITY,
+                b: VkComponentSwizzle::IDENTITY,
+                a: VkComponentSwizzle::IDENTITY,
+            },
+            subresourceRange: VkImageSubresourceRange {
+                aspectMask: VkImageAspectFlagBits::COLOR_BIT,
+                baseMipLevel: 0,
+                levelCount: 1,
+                baseArrayLayer: 0,
+                layerCount: 1
+            }
         };
 
         let mut image_view_handle = VkImageView::none();

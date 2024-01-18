@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 
 pub struct Vec2 {
     pub x: f32,

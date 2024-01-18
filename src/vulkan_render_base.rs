@@ -5,8 +5,8 @@ use crate::render_app::Window;
 use crate::util::image_extent::ImageExtent;
 use crate::vulkan_core;
 use crate::vulkan_core::{create_device, create_physical_device, Device, get_unique_queue_families, Instance, QueueFamily};
-use crate::vulkan_core::vulkan_surface::vulkan_surface::{create_surface, Surface};
-use crate::vulkan_core::vulkan_swapchain::{create_swapchain, Swapchain};
+use crate::vulkan_core::surface::vulkan_surface::{create_surface, Surface};
+use crate::vulkan_core::swapchain::{create_swapchain, Swapchain};
 
 
 const BUFFER_STRATEGY: u32 = 3;
@@ -35,7 +35,7 @@ pub struct VulkanRenderBase {
 impl VulkanRenderBase {
     pub fn get_queue_with_flags(instance: Instance, device: Device, queue_families: Vec<QueueFamily>, flags: VkQueueFlagBits) -> VkQueue {
         let mut queue_family_index: u32 = 0;
-        let mut queue_index: u32 = 0;
+        let queue_index: u32 = 0;
         for queue_family in queue_families {
             if queue_family.flags.contains(flags) {
                 queue_family_index = queue_family.index;
@@ -62,14 +62,14 @@ pub fn initialize_vulkan(window: Window) -> VulkanRenderBase {
     let surface = create_surface(instance, window);
     let physical_device = create_physical_device(instance);
     let unique_queue_families = get_unique_queue_families(instance, surface, physical_device);
-    let device = create_device(instance, physical_device, unique_queue_families.clone());
+    let device = create_device(instance, physical_device, &unique_queue_families);
 
     let graphics_queue_family = *unique_queue_families.iter().find(|q| q.flags.contains(VkQueueFlagBits::GRAPHICS_BIT)).unwrap();
     let present_queue_family = *unique_queue_families.iter().find(|q| q.present_supported).unwrap();
 
-    let graphics_queue = VulkanRenderBase::get_queue_with_flags(instance, device, unique_queue_families.clone(), VkQueueFlagBits::GRAPHICS_BIT);
-    let compute_queue = VulkanRenderBase::get_queue_with_flags(instance, device, unique_queue_families.clone(), VkQueueFlagBits::COMPUTE_BIT);
-    let present_queue = VulkanRenderBase::get_queue(instance, device, present_queue_family.index, 0);
+    let _graphics_queue = VulkanRenderBase::get_queue_with_flags(instance, device, unique_queue_families.clone(), VkQueueFlagBits::GRAPHICS_BIT);
+    let _compute_queue = VulkanRenderBase::get_queue_with_flags(instance, device, unique_queue_families.clone(), VkQueueFlagBits::COMPUTE_BIT);
+    let _present_queue = VulkanRenderBase::get_queue(instance, device, present_queue_family.index, 0);
 
     let swapchain = create_swapchain(
         instance, surface, physical_device, device, BUFFER_STRATEGY,

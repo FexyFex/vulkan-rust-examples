@@ -1,13 +1,14 @@
 use winit::event::Event;
+use winit::event::Event::WindowEvent;
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::platform::windows::{WindowExtWindows};
 use winit::window::WindowBuilder;
-use crate::vulkan_render_base::initialize_vulkan;
+use crate::vulkan_render_base::{initialize_vulkan};
 
 
 pub fn run_app() {
     let event_loop = EventLoop::new();
-    let winit_window = &WindowBuilder::new()
+    let winit_window: &winit::window::Window = &WindowBuilder::new()
         .with_title("Vulkan Stuff")
         .with_resizable(true)
         .build(&event_loop).unwrap();
@@ -15,11 +16,19 @@ pub fn run_app() {
     let window = Window { hinstance: winit_window.hinstance(), hwnd: winit_window.hwnd(), closed: false };
     let _base = initialize_vulkan(window);
 
-    event_loop.run(|event, _, control_flow| {
+    event_loop.run(|event, elwt, control_flow| {
         *control_flow = ControlFlow::Poll;
 
         match event {
-            Event::WindowEvent { event, .. } => match event {
+            Event::MainEventsCleared => {
+                //println!("Process here");
+            }
+
+            Event::RedrawRequested { .. } => {
+                //println!("Draw here");
+            }
+
+            WindowEvent { event, .. } => match event {
                 winit::event::WindowEvent::CloseRequested => {
                     destroy();
                     *control_flow = ControlFlow::ExitWithCode(0);

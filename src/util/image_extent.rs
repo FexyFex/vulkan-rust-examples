@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 
 pub struct ImageExtent {
     pub width: u32,

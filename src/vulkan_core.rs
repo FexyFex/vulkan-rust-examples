@@ -1,16 +1,18 @@
 #![allow(dead_code)]
 
-pub(crate) mod vulkan_surface;
-pub mod vulkan_debug;
-pub mod vulkan_swapchain;
+pub(crate) mod surface;
+pub mod debug;
+pub mod swapchain;
+mod cmd;
+mod descriptor;
 
 use std::ffi::{c_void, CStr, CString};
 use std::iter::Iterator;
 use std::ops::BitOr;
 use std::ptr::{null, null_mut};
 use vulkan_raw::*;
-use crate::vulkan_core::vulkan_debug::debug_callback;
-use crate::vulkan_core::vulkan_surface::vulkan_surface::Surface;
+use crate::vulkan_core::debug::debug_callback;
+use crate::vulkan_core::surface::vulkan_surface::Surface;
 
 
 const REQUIRED_INSTANCE_LAYERS: [&str; 1] = ["VK_LAYER_KHRONOS_validation"];
@@ -201,7 +203,7 @@ impl Device {
     }
 }
 
-pub fn create_device(instance: Instance, physical_device: VkPhysicalDevice, unique_queue_families: Vec<QueueFamily>) -> Device {
+pub fn create_device(instance: Instance, physical_device: VkPhysicalDevice, unique_queue_families: &Vec<QueueFamily>) -> Device {
     let lib = InstanceLevelFunctions::load_from_instance(instance.handle);
 
     let queue_count = unique_queue_families.len();
@@ -253,10 +255,11 @@ pub fn create_device(instance: Instance, physical_device: VkPhysicalDevice, uniq
             println!("MISSING DEVICE EXTENSION: {}", extension);
         }
     }
-    let extension_c_names = available_extensions.iter()
+    let mut extension_c_names = available_extensions.iter()
         .filter(|e| unsafe { REQUIRED_DEVICE_EXTENSIONS.contains(&CStr::from_ptr(e.extensionName.as_ptr()).to_str().unwrap()) })
         .map(|e| e.extensionName.as_ptr())
         .collect::<Vec<_>>();
+    unsafe { extension_c_names.set_len(REQUIRED_DEVICE_EXTENSIONS.len()) };
 
     let mut base_device_features = VkPhysicalDeviceFeatures::default();
     base_device_features.samplerAnisotropy = vk_true();
