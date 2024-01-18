@@ -3,6 +3,7 @@ use winit::event::Event::WindowEvent;
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::platform::windows::{WindowExtWindows};
 use winit::window::WindowBuilder;
+use crate::util::image_extent::ImageExtent;
 use crate::vulkan_render_base::{initialize_vulkan};
 
 
@@ -11,12 +12,18 @@ pub fn run_app() {
     let winit_window: &winit::window::Window = &WindowBuilder::new()
         .with_title("Vulkan Stuff")
         .with_resizable(true)
+        .with_active(true)
+        .with_visible(true)
+        .with_transparent(false)
         .build(&event_loop).unwrap();
 
-    let window = Window { hinstance: winit_window.hinstance(), hwnd: winit_window.hwnd(), closed: false };
-    let _base = initialize_vulkan(window);
+    let win_size = winit_window.inner_size();
+    let render_area_extent = ImageExtent::new(win_size.width, win_size.height);
 
-    event_loop.run(|event, elwt, control_flow| {
+    let window = Window { hinstance: winit_window.hinstance(), hwnd: winit_window.hwnd(), closed: false, winit: winit_window };
+    let _base = initialize_vulkan(window, 3);
+
+    event_loop.run(|event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
 
         match event {
@@ -56,5 +63,7 @@ pub struct Window{
     pub hinstance: isize,
     pub hwnd: isize,
 
-    pub closed: bool
+    pub closed: bool,
+
+    pub winit: *const winit::window::Window,
 }

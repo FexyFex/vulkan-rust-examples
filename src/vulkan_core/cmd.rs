@@ -2,6 +2,8 @@ use std::ptr::null;
 use vulkan_raw::{DeviceLevelFunctions, InstanceLevelFunctions, VkCommandBuffer, VkCommandBufferAllocateInfo, VkCommandBufferLevel, VkCommandBufferResetFlags, VkCommandPool, VkCommandPoolCreateFlagBits, VkCommandPoolCreateInfo, VkStructureType};
 use crate::vulkan_core::{Device, Instance, QueueFamily};
 
+
+#[derive(Copy, Clone)]
 pub struct CommandPool {
     pub handle: VkCommandPool,
     instance: Instance,
@@ -34,6 +36,7 @@ pub fn create_command_pool(instance: Instance, device: Device, queue_family: Que
 }
 
 
+#[derive(Copy, Clone)]
 pub struct CommandBuffer {
     pub handle: VkCommandBuffer,
     pub command_pool: CommandPool,

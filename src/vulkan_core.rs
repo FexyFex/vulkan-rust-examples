@@ -3,8 +3,10 @@
 pub(crate) mod surface;
 pub mod debug;
 pub mod swapchain;
-mod cmd;
-mod descriptor;
+pub mod cmd;
+pub mod descriptor;
+mod semaphore;
+mod pipeline;
 
 use std::ffi::{c_void, CStr, CString};
 use std::iter::Iterator;
