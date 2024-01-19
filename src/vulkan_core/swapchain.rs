@@ -4,20 +4,17 @@ use crate::util::image_extent::ImageExtent;
 use crate::vulkan_core::{Device, Instance, QueueFamily};
 use crate::vulkan_core::surface::vulkan_surface::Surface;
 
-
+#[derive(Clone)]
 pub struct Swapchain {
     pub handle: VkSwapchainKHR,
     pub extent: ImageExtent,
     pub images: Vec<VkImage>,
     pub image_views: Vec<VkImageView>,
-    instance: Instance,
     device: Device
 }
 impl Swapchain {
     pub fn destroy(&self) {
-        let lib1 = InstanceLevelFunctions::load_from_instance(self.instance.handle);
-        let lib2 = DeviceLevelFunctions::load_from_device(&lib1, self.device.handle);
-        unsafe { lib2.vkDestroySwapchainKHR(self.device.handle, self.handle, null()) };
+        unsafe { self.device.lib.vkDestroySwapchainKHR(self.device.handle, self.handle, null()) };
     }
 }
 
@@ -37,15 +34,12 @@ pub fn create_swapchain(
     graphics_queue_family: QueueFamily,
     present_queue_family: QueueFamily
 ) -> Swapchain {
-    let lib_instance = InstanceLevelFunctions::load_from_instance(instance.handle);
-    let lib_device = DeviceLevelFunctions::load_from_device(&lib_instance, device.handle);
-
     let mut capabilities = VkSurfaceCapabilitiesKHR::default();
-    unsafe { lib_instance.vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical_device, surface.handle, &mut capabilities) };
+    unsafe { instance.lib.vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical_device, surface.handle, &mut capabilities) };
 
     let mut format_count: u32 = 0;
     unsafe {
-        lib_instance.vkGetPhysicalDeviceSurfaceFormatsKHR(
+        instance.lib.vkGetPhysicalDeviceSurfaceFormatsKHR(
             physical_device,
             surface.handle,
             &mut format_count,
@@ -54,7 +48,7 @@ pub fn create_swapchain(
     };
     let mut formats = Vec::with_capacity(format_count as usize);
     unsafe {
-        lib_instance.vkGetPhysicalDeviceSurfaceFormatsKHR(
+        instance.lib.vkGetPhysicalDeviceSurfaceFormatsKHR(
             physical_device,
             surface.handle,
             &mut format_count,
@@ -65,7 +59,7 @@ pub fn create_swapchain(
 
     let mut present_mode_count: u32 = 0;
     unsafe {
-        lib_instance.vkGetPhysicalDeviceSurfacePresentModesKHR(
+        instance.lib.vkGetPhysicalDeviceSurfacePresentModesKHR(
             physical_device,
             surface.handle,
             &mut present_mode_count,
@@ -74,7 +68,7 @@ pub fn create_swapchain(
     };
     let mut present_modes = Vec::with_capacity(present_mode_count as usize);
     unsafe {
-        lib_instance.vkGetPhysicalDeviceSurfacePresentModesKHR(
+        instance.lib.vkGetPhysicalDeviceSurfacePresentModesKHR(
             physical_device,
             surface.handle,
             &mut present_mode_count,
@@ -121,17 +115,16 @@ pub fn create_swapchain(
     };
 
     let mut swapchain_handle = VkSwapchainKHR::none();
-    unsafe { lib_device.vkCreateSwapchainKHR(device.handle, &swapchain_create_info, null(), &mut swapchain_handle) };
+    unsafe { device.lib.vkCreateSwapchainKHR(device.handle, &swapchain_create_info, null(), &mut swapchain_handle) };
 
-    let images = create_images(device, swapchain_handle, &lib_device);
-    let image_views = create_image_views(device, &images, surface_format.format, &lib_device);
+    let images = create_images(device.clone(), swapchain_handle);
+    let image_views = create_image_views(device.clone(), &images, surface_format.format);
 
     return Swapchain {
         handle: swapchain_handle,
         extent,
         images,
         image_views,
-        instance,
         device
     }
 }
@@ -155,17 +148,17 @@ fn choose_present_mode(all_modes: Vec<VkPresentModeKHR>) -> VkPresentModeKHR {
     return current_best_mode;
 }
 
-fn create_images(device: Device, swapchain_handle: VkSwapchainKHR, device_lib: &DeviceLevelFunctions) -> Vec<VkImage> {
+fn create_images(device: Device, swapchain_handle: VkSwapchainKHR) -> Vec<VkImage> {
     let mut image_count: u32 = 0;
-    unsafe { (*device_lib).vkGetSwapchainImagesKHR(device.handle, swapchain_handle, &mut image_count, null_mut()) };
+    unsafe { device.lib.vkGetSwapchainImagesKHR(device.handle, swapchain_handle, &mut image_count, null_mut()) };
     let mut images = Vec::with_capacity(image_count as usize);
-    unsafe { (*device_lib).vkGetSwapchainImagesKHR(device.handle, swapchain_handle, &mut image_count, images.as_mut_ptr()) };
+    unsafe { device.lib.vkGetSwapchainImagesKHR(device.handle, swapchain_handle, &mut image_count, images.as_mut_ptr()) };
     unsafe { images.set_len(image_count as usize) };
 
     return images;
 }
 
-fn create_image_views(device: Device, images: &Vec<VkImage>, color_format: VkFormat, device_lib: &DeviceLevelFunctions) -> Vec<VkImageView> {
+fn create_image_views(device: Device, images: &Vec<VkImage>, color_format: VkFormat) -> Vec<VkImageView> {
     let mut image_views: Vec<VkImageView> = Vec::new();
 
     for current_image in images {
@@ -192,7 +185,7 @@ fn create_image_views(device: Device, images: &Vec<VkImage>, color_format: VkFor
         };
 
         let mut image_view_handle = VkImageView::none();
-        unsafe { (*device_lib).vkCreateImageView(device.handle, &image_view_info, null(), &mut image_view_handle) };
+        unsafe { device.lib.vkCreateImageView(device.handle, &image_view_info, null(), &mut image_view_handle) };
         image_views.push(image_view_handle);
     }
 

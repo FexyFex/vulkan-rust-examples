@@ -5,8 +5,8 @@ pub mod debug;
 pub mod swapchain;
 pub mod cmd;
 pub mod descriptor;
-mod semaphore;
-mod pipeline;
+pub mod sync;
+pub mod pipeline;
 
 use std::ffi::{c_void, CStr, CString};
 use std::iter::Iterator;
@@ -38,9 +38,10 @@ fn make_api_version(variant: u32, major: u32, minor: u32, patch: u32) -> u32 {
     return (variant << 29) | (major << 22) | (minor << 12) | patch;
 }
 
-#[derive(Copy, Clone)]
+#[derive(Clone)]
 pub struct Instance {
-    pub handle: VkInstance
+    pub handle: VkInstance,
+    pub lib: InstanceLevelFunctions
 }
 
 impl Instance {
@@ -126,24 +127,22 @@ pub fn create_instance() -> Instance {
     let mut instance_handle: VkInstance = VkInstance::none();
     unsafe { vkCreateInstance(&instance_create_info, null(), &mut instance_handle) };
 
-    return Instance { handle: instance_handle };
+    return Instance { handle: instance_handle, lib: InstanceLevelFunctions::load_from_instance(instance_handle) };
 }
 
 
 pub fn create_physical_device(instance: Instance) -> VkPhysicalDevice {
-    let lib = InstanceLevelFunctions::load_from_instance(instance.handle);
-
-    let mut physical_devices_count: u32 = 0;
-    unsafe { lib.vkEnumeratePhysicalDevices(instance.handle, &mut physical_devices_count, null_mut()) };
+       let mut physical_devices_count: u32 = 0;
+    unsafe { instance.lib.vkEnumeratePhysicalDevices(instance.handle, &mut physical_devices_count, null_mut()) };
     let mut physical_devices: Vec<VkPhysicalDevice> = Vec::with_capacity(physical_devices_count as usize);
-    unsafe { lib.vkEnumeratePhysicalDevices(instance.handle, &mut physical_devices_count, physical_devices.as_mut_ptr()) };
+    unsafe { instance.lib.vkEnumeratePhysicalDevices(instance.handle, &mut physical_devices_count, physical_devices.as_mut_ptr()) };
     unsafe { physical_devices.set_len(physical_devices_count as usize) }; // not sure why this is needed but it is...
 
     // to do: Choose a VkPhysicalDevice based on their properties and available features
     let physical_device = physical_devices[0];
 
     let mut physical_device_properties: VkPhysicalDeviceProperties2 = Default::default();
-    unsafe { lib.vkGetPhysicalDeviceProperties2(physical_device, &mut physical_device_properties) };
+    unsafe { instance.lib.vkGetPhysicalDeviceProperties2(physical_device, &mut physical_device_properties) };
     let device_name = unsafe { CStr::from_ptr(physical_device_properties.properties.deviceName.as_ptr()) }.to_str().unwrap();
     println!("Physical Device Chosen: {}", device_name);
 
@@ -159,13 +158,12 @@ pub struct QueueFamily {
 }
 
 pub fn get_unique_queue_families(instance: Instance, surface: Surface, physical_device: VkPhysicalDevice)-> Vec<QueueFamily> {
-    let lib = InstanceLevelFunctions::load_from_instance(instance.handle);
     let mut unique_queue_families = Vec::new();
 
     let mut queue_family_count: u32 = 0;
-    unsafe { lib.vkGetPhysicalDeviceQueueFamilyProperties(physical_device, &mut queue_family_count, null_mut()) };
+    unsafe { instance.lib.vkGetPhysicalDeviceQueueFamilyProperties(physical_device, &mut queue_family_count, null_mut()) };
     let mut queue_families_props = Vec::with_capacity(queue_family_count as usize);
-    unsafe { lib.vkGetPhysicalDeviceQueueFamilyProperties(physical_device, &mut queue_family_count, queue_families_props.as_mut_ptr()) };
+    unsafe { instance.lib.vkGetPhysicalDeviceQueueFamilyProperties(physical_device, &mut queue_family_count, queue_families_props.as_mut_ptr()) };
     unsafe { queue_families_props.set_len(queue_family_count as usize) };
 
     let relevant_flags = [VkQueueFlagBits::GRAPHICS_BIT, VkQueueFlagBits::COMPUTE_BIT, VkQueueFlagBits::TRANSFER_BIT];
@@ -179,7 +177,7 @@ pub fn get_unique_queue_families(instance: Instance, surface: Surface, physical_
         }
 
         let mut present_support = VkBool32::from(false);
-        unsafe { lib.vkGetPhysicalDeviceSurfaceSupportKHR(physical_device, i, surface.handle, &mut present_support) };
+        unsafe { instance.lib.vkGetPhysicalDeviceSurfaceSupportKHR(physical_device, i, surface.handle, &mut present_support) };
         let queue_family = QueueFamily {
             index: i,
             flags: queue_flags,
@@ -191,23 +189,19 @@ pub fn get_unique_queue_families(instance: Instance, surface: Surface, physical_
     return unique_queue_families;
 }
 
-#[derive(Copy, Clone)]
+#[derive(Clone)]
 pub struct Device {
     pub handle: VkDevice,
-    instance: VkInstance
+    pub lib: DeviceLevelFunctions,
+    instance: VkInstance,
 }
 
 impl Device {
-    fn destroy(&self) {
-        let lib_instance = InstanceLevelFunctions::load_from_instance(self.instance);
-        let lib_device = DeviceLevelFunctions::load_from_device(&lib_instance, self.handle);
-        unsafe { lib_device.vkDestroyDevice(self.handle, null()) };
-    }
+    pub fn wait_idle(&self) { unsafe { self.lib.vkDeviceWaitIdle(self.handle) }; }
+    pub fn destroy(&self) { unsafe { self.lib.vkDestroyDevice(self.handle, null()) }; }
 }
 
 pub fn create_device(instance: Instance, physical_device: VkPhysicalDevice, unique_queue_families: &Vec<QueueFamily>) -> Device {
-    let lib = InstanceLevelFunctions::load_from_instance(instance.handle);
-
     let queue_count = unique_queue_families.len();
     let queue_priority: f32 = 1.0;
     let mut queue_create_infos: Vec<VkDeviceQueueCreateInfo> = Vec::new();
@@ -227,9 +221,9 @@ pub fn create_device(instance: Instance, physical_device: VkPhysicalDevice, uniq
     unsafe { queue_create_infos.set_len(queue_count) };
 
     let mut available_layer_count: u32 = 0;
-    unsafe { lib.vkEnumerateDeviceLayerProperties(physical_device, &mut available_layer_count, null_mut()) };
+    unsafe { instance.lib.vkEnumerateDeviceLayerProperties(physical_device, &mut available_layer_count, null_mut()) };
     let mut available_layers: Vec<VkLayerProperties> = Vec::with_capacity(available_layer_count as usize);
-    unsafe { lib.vkEnumerateDeviceLayerProperties(physical_device, &mut available_layer_count, available_layers.as_mut_ptr()) };
+    unsafe { instance.lib.vkEnumerateDeviceLayerProperties(physical_device, &mut available_layer_count, available_layers.as_mut_ptr()) };
     unsafe { available_layers.set_len(available_layer_count as usize) };
     let available_layers_readable: Vec<&str> = available_layers.iter()
         .map(|l| unsafe { CStr::from_ptr(l.layerName.as_ptr()).to_str().unwrap() })
@@ -245,9 +239,9 @@ pub fn create_device(instance: Instance, physical_device: VkPhysicalDevice, uniq
         .collect::<Vec<_>>();
 
     let mut available_extension_count: u32 = 0;
-    unsafe { lib.vkEnumerateDeviceExtensionProperties(physical_device, null(), &mut available_extension_count, null_mut()) };
+    unsafe { instance.lib.vkEnumerateDeviceExtensionProperties(physical_device, null(), &mut available_extension_count, null_mut()) };
     let mut available_extensions: Vec<VkExtensionProperties> = Vec::with_capacity(available_extension_count as usize);
-    unsafe { lib.vkEnumerateDeviceExtensionProperties(physical_device, null(), &mut available_extension_count, available_extensions.as_mut_ptr()) };
+    unsafe { instance.lib.vkEnumerateDeviceExtensionProperties(physical_device, null(), &mut available_extension_count, available_extensions.as_mut_ptr()) };
     unsafe { available_extensions.set_len(available_extension_count as usize) };
     let available_extensions_readable: Vec<&str> = available_extensions.iter()
         .map(|e| unsafe { CStr::from_ptr(e.extensionName.as_ptr()).to_str().unwrap() })
@@ -291,7 +285,11 @@ pub fn create_device(instance: Instance, physical_device: VkPhysicalDevice, uniq
     };
 
     let mut device_handle = VkDevice::none();
-    unsafe { lib.vkCreateDevice(physical_device, &device_create_info, null(), &mut device_handle) };
+    unsafe { instance.lib.vkCreateDevice(physical_device, &device_create_info, null(), &mut device_handle) };
 
-    return Device { handle: device_handle, instance: instance.handle };
+    return Device {
+        handle: device_handle,
+        lib: DeviceLevelFunctions::load_from_device(&instance.lib, device_handle),
+        instance: instance.handle
+    };
 }

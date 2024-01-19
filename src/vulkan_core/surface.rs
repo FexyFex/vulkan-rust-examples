@@ -4,22 +4,19 @@ pub mod vulkan_surface {
     use crate::render_app::Window;
     use crate::vulkan_core::Instance;
 
-    #[derive(Copy, Clone)]
+    #[derive(Clone)]
     pub struct Surface {
         pub handle: VkSurfaceKHR,
-        instance: VkInstance
+        instance: Instance
     }
 
     impl Surface {
         pub fn destroy(&self) {
-            let lib = InstanceLevelFunctions::load_from_instance(self.instance);
-            unsafe { lib.vkDestroyInstance(self.instance, null()) };
+            unsafe { self.instance.lib.vkDestroyInstance(self.instance.handle, null()) };
         }
     }
 
     pub fn create_surface(instance: Instance, window: Window) -> Surface {
-        let lib = InstanceLevelFunctions::load_from_instance(instance.handle);
-
         let create_info = VkWin32SurfaceCreateInfoKHR {
             sType: VkStructureType::WIN32_SURFACE_CREATE_INFO_KHR,
             pNext: null(),
@@ -29,8 +26,8 @@ pub mod vulkan_surface {
         };
 
         let mut surface_handle = VkSurfaceKHR::none();
-        unsafe { lib.vkCreateWin32SurfaceKHR(instance.handle, &create_info, null(), &mut surface_handle) };
+        unsafe { instance.lib.vkCreateWin32SurfaceKHR(instance.handle, &create_info, null(), &mut surface_handle) };
 
-        return Surface { handle: surface_handle, instance: instance.handle };
+        return Surface { handle: surface_handle, instance };
     }
 }
