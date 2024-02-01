@@ -2,25 +2,25 @@
 
 use std::ffi::{c_void, CStr};
 use colored::Colorize;
-use vulkan_raw::*;
+use ash::*;
+use ash::vk::{Bool32, DebugUtilsMessengerCallbackDataEXT};
 
 
-pub extern "C" fn debug_callback(
-    message_severity: VkDebugUtilsMessageSeverityFlagBitsEXT,
-    message_types: VkDebugUtilsMessageTypeFlagsEXT,
-    p_data: *const VkDebugUtilsMessengerCallbackDataEXT,
-    p_user_data: *mut c_void
-) -> VkBool32 {
-    let p_message = unsafe { (*p_data).pMessage };
-    let message = unsafe { CStr::from_ptr(p_message) }.to_string_lossy();
+pub unsafe extern "system" fn debug_callback(
+    message_severity: vk::DebugUtilsMessageSeverityFlagsEXT,
+    message_types: vk::DebugUtilsMessageTypeFlagsEXT,
+    p_callback_data: *const DebugUtilsMessengerCallbackDataEXT,
+    p_user_data: *mut c_void,
+) -> Bool32 {
+    let message = CStr::from_ptr((*p_callback_data).p_message);
 
     let severity = match message_severity {
-        VkDebugUtilsMessageSeverityFlagBitsEXT::INFO_BIT_EXT => "INFO".white(),
-        VkDebugUtilsMessageSeverityFlagBitsEXT::WARNING_BIT_EXT => "WARNING".yellow(),
-        VkDebugUtilsMessageSeverityFlagBitsEXT::ERROR_BIT_EXT => "ERROR".red(),
+        vk::DebugUtilsMessageSeverityFlagsEXT::INFO => "INFO".white(),
+        vk::DebugUtilsMessageSeverityFlagsEXT::WARNING => "WARNING".yellow(),
+        vk::DebugUtilsMessageSeverityFlagsEXT::ERROR => "ERROR".red(),
         _ => "".white()
     };
 
-    println!("{}: {}", severity, message);
-    return VkBool32::FALSE;
+    println!("{}: {}", severity, message.to_str().unwrap());
+    return vk::FALSE;
 }

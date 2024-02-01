@@ -1,71 +1,29 @@
 use std::ptr::null;
-use vulkan_raw::*;
-use crate::vulkan_core::{Device, QueueFamily};
+use ash::version::DeviceV1_0;
+use ash::vk;
+use crate::vulkan_core::{QueueFamily};
 
 
-#[derive(Clone)]
-pub struct CommandPool {
-    pub handle: VkCommandPool,
-    device: Device
-}
-impl CommandPool {
-    pub fn destroy(&self) {
-        unsafe { self.device.lib.vkDestroyCommandPool(self.device.handle, self.handle, null()) };
-    }
-}
-
-
-pub fn create_command_pool(device: Device, queue_family: QueueFamily) -> CommandPool {
-    let create_info = VkCommandPoolCreateInfo {
-        sType: VkStructureType::COMMAND_POOL_CREATE_INFO,
-        pNext: null(),
-        flags: VkCommandPoolCreateFlagBits::RESET_COMMAND_BUFFER_BIT,
-        queueFamilyIndex: queue_family.index,
+pub fn create_command_pool(device: &ash::Device, queue_family: QueueFamily) -> vk::CommandPool {
+    let create_info = vk::CommandPoolCreateInfo {
+        s_type: vk::StructureType::COMMAND_POOL_CREATE_INFO,
+        p_next: null(),
+        flags: vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER,
+        queue_family_index: queue_family.index,
     };
     
-    let mut command_pool_handle = VkCommandPool::none();
-    unsafe { device.lib.vkCreateCommandPool(device.handle, &create_info, null(), &mut command_pool_handle) };
-
-    return CommandPool { handle: command_pool_handle, device };
+    return unsafe { device.create_command_pool(&create_info, None).expect("MEH") } ;
 }
 
 
-#[derive(Clone)]
-pub struct CommandBuffer {
-    pub handle: VkCommandBuffer,
-    pub command_pool: CommandPool,
-    device: Device
-}
-impl CommandBuffer {
-    pub fn free(&self) {
-        unsafe {
-            self.device.lib.vkFreeCommandBuffers(
-                self.device.handle,
-                self.command_pool.handle,
-                1,
-                &self.handle
-        )};
-    }
-
-    pub fn reset(&self) {
-        unsafe { self.device.lib.vkResetCommandBuffer(self.handle, VkCommandBufferResetFlags::empty()) };
-    }
-}
-
-pub fn create_command_buffer(device: Device, command_pool: CommandPool, level: VkCommandBufferLevel) -> CommandBuffer {
-    let alloc_info = VkCommandBufferAllocateInfo {
-        sType: VkStructureType::COMMAND_BUFFER_ALLOCATE_INFO,
-        pNext: null(),
-        commandPool: command_pool.handle,
-        level,
-        commandBufferCount: 1
-    };
-
-    let mut cmdbuf_handle = VkCommandBuffer::none();
-    unsafe { device.lib.vkAllocateCommandBuffers(device.handle, &alloc_info, &mut cmdbuf_handle) };
-    return CommandBuffer {
-        handle: cmdbuf_handle,
+pub fn create_command_buffer(device: &ash::Device, command_pool: vk::CommandPool, level: vk::CommandBufferLevel) -> vk::CommandBuffer {
+    let alloc_info = vk::CommandBufferAllocateInfo {
+        s_type: vk::StructureType::COMMAND_BUFFER_ALLOCATE_INFO,
+        p_next: null(),
         command_pool,
-        device
+        level,
+        command_buffer_count: 1
     };
+
+    return unsafe { device.allocate_command_buffers(&alloc_info).expect("MEH")[0] };
 }

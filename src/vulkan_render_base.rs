@@ -1,16 +1,14 @@
 #![allow(dead_code)]
 
 use std::ptr::{null, null_mut};
-use vulkan_raw::*;
-use vulkan_raw::VkResult::{ERROR_OUT_OF_DATE_KHR, SUBOPTIMAL_KHR, SUCCESS};
-use crate::render_app::Window;
-use crate::util::image_extent::ImageExtent;
+use ash::version::DeviceV1_0;
+use ash::vk;
+use ash::vk::QueueFlags;
 use crate::vulkan_core;
-use crate::vulkan_core::{create_device, create_physical_device, Device, get_unique_queue_families, Instance, QueueFamily};
-use crate::vulkan_core::cmd::{CommandBuffer, CommandPool, create_command_buffer, create_command_pool};
-use crate::vulkan_core::sync::{create_fence, create_semaphore, Fence, Semaphore};
-use crate::vulkan_core::surface::vulkan_surface::{create_surface, Surface};
-use crate::vulkan_core::swapchain::{create_swapchain, Swapchain};
+use crate::vulkan_core::{create_device, create_physical_device, create_surface, get_unique_queue_families, QueueFamily, SurfaceInfo};
+use crate::vulkan_core::cmd::{create_command_buffer, create_command_pool};
+use crate::vulkan_core::sync::{create_fence, create_semaphore};
+use crate::vulkan_core::swapchain::{create_swapchain, SwapchainInfo};
 
 
 pub struct FramePreparation {
@@ -25,25 +23,25 @@ pub struct FrameSubmitData {
 
 
 pub struct VulkanRenderBase {
-    pub instance: Instance,
-    pub physical_device: VkPhysicalDevice,
-    pub device: Device,
-    pub surface: Surface,
-    pub swapchain: Swapchain,
+    pub instance: ash::Instance,
+    pub physical_device: vk::PhysicalDevice,
+    pub device: ash::Device,
+    pub surface: SurfaceInfo,
+    pub swapchain: SwapchainInfo,
 
     pub unique_queue_families: Vec<QueueFamily>,
     pub graphics_queue_family: QueueFamily,
     pub present_queue_family: QueueFamily,
-    pub graphics_queue: VkQueue,
-    pub compute_queue: VkQueue,
-    pub present_queue: VkQueue,
+    pub graphics_queue: vk::Queue,
+    pub compute_queue: vk::Queue,
+    pub present_queue: vk::Queue,
 
-    pub command_pool: CommandPool,
-    pub command_buffers: Vec<CommandBuffer>,
+    pub command_pool: vk::CommandPool,
+    pub command_buffers: Vec<vk::CommandBuffer>,
 
-    pub image_available_semaphores: Vec<Semaphore>,
-    pub render_finished_semaphores: Vec<Semaphore>,
-    pub in_flight_fences: Vec<Fence>,
+    pub image_available_semaphores: Vec<vk::Semaphore>,
+    pub render_finished_semaphores: Vec<vk::Semaphore>,
+    pub in_flight_fences: Vec<vk::Fence>,
 
     pub buffering_strategy: u32,
     pub frames_in_flight: u32,
@@ -53,74 +51,76 @@ pub struct VulkanRenderBase {
 }
 impl VulkanRenderBase {
     pub fn prepare_frame(&mut self) -> FramePreparation { unsafe {
-        let wait_fence: Fence = self.in_flight_fences[self.frame_in_flight_index as usize].clone();
-        let timeout: u64 = !0;
-        self.device.lib.vkWaitForFences(
-            self.device.handle, 1, &wait_fence.handle,
-            VkBool32::from(true), timeout
-        );
+        let wait_fence = self.in_flight_fences[self.frame_in_flight_index as usize];
+        let wait_fences = [wait_fence];
+        self.device.wait_for_fences(&wait_fences, true, u64::MAX)
+            .expect("MEH");
 
-        let mut image_index: u32 = !0;
-        let available_semaphore: Semaphore = self.image_available_semaphores[self.frame_in_flight_index as usize].clone();
-        let result_acquire = self.device.lib.vkAcquireNextImageKHR(
-            self.device.handle, self.swapchain.handle,
-            timeout, available_semaphore.handle, VkFence::none(),
-            &mut image_index
-        );
+        let available_semaphore = self.image_available_semaphores[self.frame_in_flight_index as usize];
+        let result_acquire = self.swapchain.loader
+            .acquire_next_image(self.swapchain.handle, u64::MAX, available_semaphore, vk::Fence::null())
+            .expect("MEH");
 
-        if result_acquire == ERROR_OUT_OF_DATE_KHR {
+        let image_index: u32 = result_acquire.0;
+        let out_of_date = result_acquire.1;
+
+        if out_of_date {
             self.resize_swapchain();
             return FramePreparation { acquire_successful: false, image_index };
         }
 
-        let reset_fence: Fence = self.in_flight_fences[self.frame_in_flight_index as usize].clone();
-        reset_fence.reset();
+        let reset_fence = self.in_flight_fences[self.frame_in_flight_index as usize];
+        self.device.reset_fences(&[reset_fence])
+            .expect("MEH");
 
-        if result_acquire == SUCCESS || result_acquire == SUBOPTIMAL_KHR {
+        if !out_of_date {
             return FramePreparation { acquire_successful: true, image_index };
         }
 
         unimplemented!()
-    } }
+    }}
 
     pub fn submit_frame(&mut self, submit_data: FrameSubmitData) { unsafe {
         if !submit_data.do_submit { return };
 
         let in_flight_index = self.frame_in_flight_index as usize;
 
-        let wait_semaphore = self.image_available_semaphores[in_flight_index].clone();
-        let command_buffer = self.command_buffers[in_flight_index].clone();
-        let signal_semaphore = self.render_finished_semaphores[in_flight_index].clone();
-        let wait_stage = VkPipelineStageFlags::COLOR_ATTACHMENT_OUTPUT_BIT;
+        let wait_semaphore = self.image_available_semaphores[in_flight_index];
+        let command_buffer = self.command_buffers[in_flight_index];
+        let signal_semaphore = self.render_finished_semaphores[in_flight_index];
+        let wait_stage = vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT;
 
-        let submit_info = VkSubmitInfo {
-            sType: VkStructureType::SUBMIT_INFO,
-            pNext: null(),
-            waitSemaphoreCount: 1,
-            pWaitSemaphores: &wait_semaphore.handle,
-            pWaitDstStageMask: &wait_stage,
-            commandBufferCount: 1,
-            pCommandBuffers: &command_buffer.handle,
-            signalSemaphoreCount: 1,
-            pSignalSemaphores: &signal_semaphore.handle,
+        let submit_info = vk::SubmitInfo {
+            s_type: vk::StructureType::SUBMIT_INFO,
+            p_next: null(),
+            wait_semaphore_count: 1,
+            p_wait_semaphores: &wait_semaphore,
+            p_wait_dst_stage_mask: &wait_stage,
+            command_buffer_count: 1,
+            p_command_buffers: &command_buffer,
+            signal_semaphore_count: 1,
+            p_signal_semaphores: &signal_semaphore,
         };
+        let submit_infos = [submit_info];
 
         let submit_fence = self.in_flight_fences[in_flight_index].clone();
-        self.device.lib.vkQueueSubmit(self.graphics_queue, 1, &submit_info, submit_fence.handle);
+        self.device.queue_submit(self.graphics_queue, &submit_infos, submit_fence)
+            .expect("MEH");
 
-        let present_info = VkPresentInfoKHR {
-            sType: VkStructureType::PRESENT_INFO_KHR,
-            pNext: null(),
-            waitSemaphoreCount: 1,
-            pWaitSemaphores: &signal_semaphore.handle,
-            swapchainCount: 1,
-            pSwapchains: &self.swapchain.handle,
-            pImageIndices: &submit_data.image_index,
-            pResults: null_mut(),
+        let present_info = vk::PresentInfoKHR {
+            s_type: vk::StructureType::PRESENT_INFO_KHR,
+            p_next: null(),
+            wait_semaphore_count: 1,
+            p_wait_semaphores: &signal_semaphore,
+            swapchain_count: 1,
+            p_swapchains: &self.swapchain.handle,
+            p_image_indices: &submit_data.image_index,
+            p_results: null_mut(),
         };
 
-        let result_present = self.device.lib.vkQueuePresentKHR(self.present_queue, &present_info);
-        if result_present == ERROR_OUT_OF_DATE_KHR || result_present == SUBOPTIMAL_KHR {
+        let result_present = self.swapchain.loader.queue_present(self.present_queue, &present_info)
+            .expect("MEH") as i32;
+        if result_present == -1000001004 /* OUT OF DATE*/ || result_present == 1000001003 /* SUBOPTIMAL_KHR */ {
             self.resize_swapchain();
         }
 
@@ -129,58 +129,62 @@ impl VulkanRenderBase {
     }}
 
     pub fn resize_swapchain(&mut self) {
-        self.device.wait_idle();
+        unsafe { self.device.device_wait_idle().expect("MEH") };
 
-        self.swapchain.destroy();
+        unsafe { self.swapchain.loader.destroy_swapchain(self.swapchain.handle, None) };
         // on resize destroy
 
         self.swapchain = create_swapchain(
-            self.instance.clone(),
-            self.surface.clone(),
+            &self.instance,
+            &self.surface,
             self.physical_device,
-            self.device.clone(),
+            &self.device,
             self.buffering_strategy,
-            ImageExtent { width: 800, height: 600 },
-            self.graphics_queue_family,
-            self.present_queue_family
+            &self.graphics_queue_family,
+            &self.present_queue_family
         );
         // on resize recreate
     }
 }
 
 
-pub fn initialize_vulkan(window: Window, buffering_strategy: u32) -> VulkanRenderBase {
+pub fn initialize_vulkan(window: &winit::window::Window, buffering_strategy: u32) -> VulkanRenderBase {
     let frames_in_flight = buffering_strategy - 1;
 
-    let instance = vulkan_core::create_instance();
-    let surface = create_surface(instance.clone(), window);
-    let physical_device = create_physical_device(instance.clone());
-    let unique_queue_families = get_unique_queue_families(instance.clone(), surface.clone(), physical_device);
-    let device = create_device(instance.clone(), physical_device, &unique_queue_families);
+    let entry = ash::Entry::new().expect("Filed to initialize!");
 
-    let graphics_queue_family = *unique_queue_families.iter().find(|q| q.flags.contains(VkQueueFlagBits::GRAPHICS_BIT)).unwrap();
-    let present_queue_family = *unique_queue_families.iter().find(|q| q.present_supported).unwrap();
+    let instance = vulkan_core::create_instance(&entry);
+    let surface_info = create_surface(&entry, &instance, window);
+    let physical_device = create_physical_device(&instance);
+    let unique_queue_families = get_unique_queue_families(&instance, &surface_info, physical_device);
+    let device = create_device(&instance, physical_device, &unique_queue_families);
 
-    let graphics_queue = get_first_queue_with_flags(device.clone(), unique_queue_families.clone(), VkQueueFlagBits::GRAPHICS_BIT);
-    let compute_queue = get_first_queue_with_flags(device.clone(), unique_queue_families.clone(), VkQueueFlagBits::COMPUTE_BIT);
-    let present_queue = get_queue(device.clone(), present_queue_family.index, 0);
+    let graphics_queue_family = *unique_queue_families.iter()
+        .find(|q| q.flags.contains(QueueFlags::GRAPHICS))
+        .expect("MEH");
+    let present_queue_family = *unique_queue_families.iter()
+        .find(|q| q.present_supported)
+        .expect("MEH");
+
+    let graphics_queue = get_first_queue_with_flags(&device, unique_queue_families.clone(), QueueFlags::GRAPHICS);
+    let compute_queue = get_first_queue_with_flags(&device, unique_queue_families.clone(), QueueFlags::COMPUTE);
+    let present_queue = get_queue(&device, present_queue_family.index, 0);
 
     let swapchain = create_swapchain(
-        instance.clone(), surface.clone(), physical_device, device.clone(), buffering_strategy,
-        ImageExtent { width: 800, height: 600 },
-        graphics_queue_family, present_queue_family
+        &instance, &surface_info, physical_device, &device, buffering_strategy,
+        &graphics_queue_family, &present_queue_family
     );
 
-    let command_pool = create_command_pool(device.clone(), graphics_queue_family);
-    let mut command_buffers: Vec<CommandBuffer> = Vec::new();
-    let mut image_available_semaphores: Vec<Semaphore> = Vec::new();
-    let mut render_finished_semaphores: Vec<Semaphore> = Vec::new();
-    let mut in_flight_fences: Vec<Fence> = Vec::new();
+    let command_pool = create_command_pool(&device, graphics_queue_family);
+    let mut command_buffers: Vec<vk::CommandBuffer> = Vec::new();
+    let mut image_available_semaphores: Vec<vk::Semaphore> = Vec::new();
+    let mut render_finished_semaphores: Vec<vk::Semaphore> = Vec::new();
+    let mut in_flight_fences: Vec<vk::Fence> = Vec::new();
     for _i in 0..frames_in_flight {
-        command_buffers.push(create_command_buffer(device.clone(), command_pool.clone(), VkCommandBufferLevel::PRIMARY));
-        image_available_semaphores.push(create_semaphore(device.clone()));
-        render_finished_semaphores.push(create_semaphore(device.clone()));
-        in_flight_fences.push(create_fence(device.clone()));
+        command_buffers.push(create_command_buffer(&device, command_pool, vk::CommandBufferLevel::PRIMARY));
+        image_available_semaphores.push(create_semaphore(&device));
+        render_finished_semaphores.push(create_semaphore(&device));
+        in_flight_fences.push(create_fence(&device));
     }
     unsafe {
         command_buffers.set_len(frames_in_flight as usize);
@@ -190,8 +194,8 @@ pub fn initialize_vulkan(window: Window, buffering_strategy: u32) -> VulkanRende
     };
 
     return VulkanRenderBase {
-        instance: instance.clone(), physical_device, device: device.clone(),
-        surface: surface.clone(), swapchain: swapchain.clone(),
+        instance, physical_device, device,
+        surface: surface_info, swapchain,
         unique_queue_families, graphics_queue_family, present_queue_family,
         graphics_queue, compute_queue, present_queue,
         command_pool: command_pool.clone(), command_buffers: command_buffers.clone(),
@@ -201,7 +205,7 @@ pub fn initialize_vulkan(window: Window, buffering_strategy: u32) -> VulkanRende
 }
 
 
-pub fn get_first_queue_with_flags(device: Device, queue_families: Vec<QueueFamily>, flags: VkQueueFlagBits) -> VkQueue {
+pub fn get_first_queue_with_flags(device: &ash::Device, queue_families: Vec<QueueFamily>, flags: QueueFlags) -> vk::Queue {
     let mut queue_family_index: u32 = 0;
     let queue_index: u32 = 0;
     for queue_family in queue_families {
@@ -214,8 +218,6 @@ pub fn get_first_queue_with_flags(device: Device, queue_families: Vec<QueueFamil
     return get_queue(device, queue_family_index, queue_index);
 }
 
-pub fn get_queue(device: Device, family_index: u32, queue_index: u32) -> VkQueue {
-    let mut queue: VkQueue = VkQueue::none();
-    unsafe { device.lib.vkGetDeviceQueue(device.handle, family_index, queue_index, &mut queue) };
-    return queue;
+pub fn get_queue(device: &ash::Device, family_index: u32, queue_index: u32) -> vk::Queue {
+    return unsafe { device.get_device_queue(family_index, queue_index) };
 }
