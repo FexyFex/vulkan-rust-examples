@@ -7,6 +7,7 @@ pub mod cmd;
 pub mod descriptor;
 pub mod sync;
 pub mod pipeline;
+pub mod structs;
 
 use std::ffi::{c_void, CStr, CString};
 use std::iter::Iterator;
@@ -55,7 +56,7 @@ pub fn create_instance(entry: &ash::Entry) -> ash::Instance {
     };
 
     // Instance Layers
-    let layers = unsafe { entry.enumerate_instance_layer_properties().expect("MEH") };
+    let layers = entry.enumerate_instance_layer_properties().expect("MEH");
     let layer_readable_names = layers.iter()
         .map(|e| unsafe { CStr::from_ptr(e.layer_name.as_ptr()).to_str().unwrap() })
         .collect::<Vec<_>>();
@@ -70,7 +71,7 @@ pub fn create_instance(entry: &ash::Entry) -> ash::Instance {
         .collect::<Vec<_>>();
 
     // Instance Extensions
-    let extensions = unsafe { entry.enumerate_instance_extension_properties().expect("MEH") };
+    let extensions = entry.enumerate_instance_extension_properties().expect("MEH");
     let extension_readable_names = extensions.iter()
         .map(|e| unsafe { CStr::from_ptr(e.extension_name.as_ptr()).to_str().unwrap() })
         .collect::<Vec<_>>();
@@ -210,21 +211,15 @@ pub fn create_device(instance: &ash::Instance, physical_device: vk::PhysicalDevi
         .multi_draw_indirect(true)
         .build();
 
-    /*
-    let features2 = vk::PhysicalDeviceFeatures2::builder()
-        .descriptorIndexing(true)
-        .descriptorBindingPartiallyBound(true)
-        .descriptorBindingVariableDescriptorCount(true)
-        .shaderStorageBufferArrayNonUniformIndexing(true)
-        .shaderSampledImageArrayNonUniformIndexing(true)
-        .descriptorBindingSampledImageUpdateAfterBind(true)
-        .descriptorBindingStorageBufferUpdateAfterBind(true)
-        .build();
-     */
+    let mut dynamic_rendering = structs::VkPhysicalDeviceDynamicRenderingFeatures {
+        s_type: vk::StructureType::from_raw(1000044003),
+        p_next: null(),
+        dynamic_rendering: vk::Bool32::from(true)
+    };
 
     let device_create_info = vk::DeviceCreateInfo {
         s_type: vk::StructureType::DEVICE_CREATE_INFO,
-        p_next: null(),
+        p_next: &mut dynamic_rendering as *mut _ as *mut c_void,
         flags: vk::DeviceCreateFlags::empty(),
         queue_create_info_count: queue_create_infos.len() as u32,
         p_queue_create_infos: queue_create_infos.as_ptr(),

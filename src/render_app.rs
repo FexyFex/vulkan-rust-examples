@@ -5,13 +5,14 @@ use winit::window::WindowBuilder;
 use crate::vulkan_render_base::{initialize_vulkan};
 
 
-struct RenderApp {
-    window: winit::window::Window
+pub struct RenderApp {
+    pub event_loop: EventLoop<()>,
+    pub window: winit::window::Window
 }
 
 impl RenderApp {
-    pub fn main_loop(self, event_loop: EventLoop<()>) {
-        event_loop.run(move |event, _, control_flow| {
+    pub fn main_loop(self) {
+        self.event_loop.run(move |event, _, control_flow| {
             *control_flow = ControlFlow::Poll;
 
             match event {
@@ -29,7 +30,6 @@ impl RenderApp {
 
                 WindowEvent { event, .. } => match event {
                     winit::event::WindowEvent::CloseRequested => {
-                        destroy();
                         *control_flow = ControlFlow::Exit;
                     }
 
@@ -47,7 +47,7 @@ impl RenderApp {
     }
 }
 
-pub fn run_app() {
+pub fn run_app() -> RenderApp {
     let event_loop = EventLoop::new();
     let winit_window: winit::window::Window = WindowBuilder::new()
         .with_title("Vulkan Stuff")
@@ -58,10 +58,5 @@ pub fn run_app() {
 
     let _base = initialize_vulkan(&winit_window, 3);
 
-    let render_app = RenderApp { window: winit_window };
-    render_app.main_loop(event_loop);
-}
-
-fn destroy() {
-    println!("Goodbye");
+    return RenderApp { event_loop, window: winit_window };
 }

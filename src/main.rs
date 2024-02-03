@@ -7,5 +7,5 @@ mod hello_triangle;
 
 
 fn main() {
-    render_app::run_app();
+    hello_triangle::main();
 }

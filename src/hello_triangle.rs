@@ -1,3 +1,6 @@
+use crate::render_app;
+
 pub fn main() {
-    //let vulkan_base = initialize_vulkan(1, 3);
+    let render_app = render_app::run_app();
+    render_app.main_loop();
 }
