@@ -1,4 +1,4 @@
-#![allow(dead_code)]
+#![allow(dead_code, deprecated)]
 
 pub(crate) mod surface;
 pub mod debug;
@@ -7,14 +7,12 @@ pub mod cmd;
 pub mod descriptor;
 pub mod sync;
 pub mod pipeline;
-pub mod structs;
 
 use std::ffi::{c_void, CStr, CString};
 use std::iter::Iterator;
 use std::ops::BitOr;
 use std::ptr::{null, null_mut};
 use ash::*;
-use ash::version::{EntryV1_0, InstanceV1_0};
 use ash::vk::{QueueFlags};
 use crate::vulkan_core::debug::debug_callback;
 
@@ -26,19 +24,12 @@ const REQUIRED_INSTANCE_EXTENSIONS: [&str; 4] = [
     "VK_KHR_surface",
     "VK_KHR_win32_surface"
 ];
-const REQUIRED_DEVICE_EXTENSIONS: [&str; 3] = [
+const REQUIRED_DEVICE_EXTENSIONS: [&str; 4] = [
     "VK_KHR_swapchain",
+    "VK_KHR_dynamic_rendering",
     "VK_EXT_descriptor_indexing",
-    "VK_KHR_dynamic_rendering"
+    "VK_KHR_depth_stencil_resolve"
 ];
-
-fn vk_true() -> vk::Bool32 { return vk::Bool32::from(true) }
-fn make_version(major: u32, minor: u32, patch: u32) -> u32 {
-    return (major << 22) | (minor << 12) | (patch);
-}
-fn make_api_version(variant: u32, major: u32, minor: u32, patch: u32) -> u32 {
-    return (variant << 29) | (major << 22) | (minor << 12) | patch;
-}
 
 
 pub fn create_instance(entry: &ash::Entry) -> ash::Instance {
@@ -49,10 +40,10 @@ pub fn create_instance(entry: &ash::Entry) -> ash::Instance {
         s_type: vk::StructureType::APPLICATION_INFO,
         p_next: null(),
         p_application_name: p_application_name.as_ptr(),
-        application_version: make_version(0, 0, 1),
+        application_version: vk::make_version(0, 0, 1),
         p_engine_name: p_engine_name.as_ptr(),
-        engine_version: make_version(0, 0, 1),
-        api_version: make_api_version(0, 1, 2, 0),
+        engine_version: vk::make_version(0, 0, 1),
+        api_version: vk::make_api_version(0, 1, 3, 0),
     };
 
     // Instance Layers
@@ -71,7 +62,7 @@ pub fn create_instance(entry: &ash::Entry) -> ash::Instance {
         .collect::<Vec<_>>();
 
     // Instance Extensions
-    let extensions = entry.enumerate_instance_extension_properties().expect("MEH");
+    let extensions = entry.enumerate_instance_extension_properties(None).expect("MEH");
     let extension_readable_names = extensions.iter()
         .map(|e| unsafe { CStr::from_ptr(e.extension_name.as_ptr()).to_str().unwrap() })
         .collect::<Vec<_>>();
@@ -85,12 +76,17 @@ pub fn create_instance(entry: &ash::Entry) -> ash::Instance {
         .map(|e| e.extension_name.as_ptr())
         .collect::<Vec<_>>();
 
+    let message_type = vk::DebugUtilsMessageTypeFlagsEXT::VALIDATION |
+            vk::DebugUtilsMessageTypeFlagsEXT::GENERAL |
+            vk::DebugUtilsMessageTypeFlagsEXT::PERFORMANCE |
+            vk::DebugUtilsMessageTypeFlagsEXT::DEVICE_ADDRESS_BINDING;
+
     let mut debug_create_info: vk::DebugUtilsMessengerCreateInfoEXT = vk::DebugUtilsMessengerCreateInfoEXT {
         s_type: vk::StructureType::DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
         p_next: null(),
         flags: vk::DebugUtilsMessengerCreateFlagsEXT::empty(),
         message_severity: vk::DebugUtilsMessageSeverityFlagsEXT::WARNING | vk::DebugUtilsMessageSeverityFlagsEXT::ERROR,
-        message_type: vk::DebugUtilsMessageTypeFlagsEXT::all(),
+        message_type,
         pfn_user_callback: Some(debug_callback),
         p_user_data: null_mut(),
     };
@@ -98,7 +94,7 @@ pub fn create_instance(entry: &ash::Entry) -> ash::Instance {
     let instance_create_info = vk::InstanceCreateInfo {
         s_type: vk::StructureType::INSTANCE_CREATE_INFO,
         p_next: &mut debug_create_info as *mut _ as *mut c_void,
-        flags: vk::InstanceCreateFlags::all(),
+        flags: vk::InstanceCreateFlags::empty(),
         p_application_info: &app_info,
         enabled_layer_count: layer_c_names.len() as u32,
         pp_enabled_layer_names: layer_c_names.as_ptr(),
@@ -158,7 +154,7 @@ pub fn get_unique_queue_families(instance: &ash::Instance, surface: &SurfaceInfo
         let queue_family = QueueFamily {
             index: i as u32,
             flags: queue_flags,
-            present_supported: present_support
+            present_supported: present_support.unwrap()
         };
         unique_queue_families.push(queue_family);
     }
@@ -211,11 +207,9 @@ pub fn create_device(instance: &ash::Instance, physical_device: vk::PhysicalDevi
         .multi_draw_indirect(true)
         .build();
 
-    let mut dynamic_rendering = structs::VkPhysicalDeviceDynamicRenderingFeatures {
-        s_type: vk::StructureType::from_raw(1000044003),
-        p_next: null(),
-        dynamic_rendering: vk::Bool32::from(true)
-    };
+    let mut dynamic_rendering = vk::PhysicalDeviceDynamicRenderingFeatures::builder()
+        .dynamic_rendering(true)
+        .build();
 
     let device_create_info = vk::DeviceCreateInfo {
         s_type: vk::StructureType::DEVICE_CREATE_INFO,

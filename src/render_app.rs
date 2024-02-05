@@ -2,16 +2,19 @@ use winit::event::Event;
 use winit::event::Event::WindowEvent;
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::WindowBuilder;
-use crate::vulkan_render_base::{initialize_vulkan};
+use crate::vulkan_render_base::{FramePreparation, FrameSubmitData, initialize_vulkan, VulkanRenderBase};
 
+
+type RecordCommandBufferFunc = fn(vulkan_base: &VulkanRenderBase, frame_preparation: FramePreparation) -> FrameSubmitData;
 
 pub struct RenderApp {
     pub event_loop: EventLoop<()>,
-    pub window: winit::window::Window
+    pub window: winit::window::Window,
+    pub vulkan_base: VulkanRenderBase,
 }
 
 impl RenderApp {
-    pub fn main_loop(self) {
+    pub fn main_loop(mut self, record_cmd_function: RecordCommandBufferFunc) {
         self.event_loop.run(move |event, _, control_flow| {
             *control_flow = ControlFlow::Poll;
 
@@ -21,11 +24,13 @@ impl RenderApp {
                 }
 
                 Event::RedrawRequested { .. } => {
-                    //println!("Draw here");
+                    let prep = self.vulkan_base.prepare_frame();
+                    let submit = record_cmd_function(&self.vulkan_base, prep);
+                    self.vulkan_base.submit_frame(submit);
                 }
 
                 Event::LoopDestroyed => {
-                    // device wait idle!
+                    unsafe { self.vulkan_base.device.device_wait_idle().expect("MEH") };
                 }
 
                 WindowEvent { event, .. } => match event {
@@ -56,7 +61,7 @@ pub fn run_app() -> RenderApp {
         .with_transparent(false)
         .build(&event_loop).unwrap();
 
-    let _base = initialize_vulkan(&winit_window, 3);
+    let base = initialize_vulkan(&winit_window, 3);
 
-    return RenderApp { event_loop, window: winit_window };
+    return RenderApp { event_loop, window: winit_window, vulkan_base: base };
 }

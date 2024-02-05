@@ -1,7 +1,6 @@
 #![allow(dead_code)]
 
 use std::ptr::{null, null_mut};
-use ash::version::DeviceV1_0;
 use ash::vk;
 use ash::vk::QueueFlags;
 use crate::vulkan_core;
@@ -77,7 +76,7 @@ impl VulkanRenderBase {
             return FramePreparation { acquire_successful: true, image_index };
         }
 
-        unimplemented!()
+        panic!()
     }}
 
     pub fn submit_frame(&mut self, submit_data: FrameSubmitData) { unsafe {
@@ -151,7 +150,7 @@ impl VulkanRenderBase {
 pub fn initialize_vulkan(window: &winit::window::Window, buffering_strategy: u32) -> VulkanRenderBase {
     let frames_in_flight = buffering_strategy - 1;
 
-    let entry = ash::Entry::new().expect("Filed to initialize!");
+    let entry = unsafe { ash::Entry::load().expect("Filed to initialize!") };
 
     let instance = vulkan_core::create_instance(&entry);
     let surface_info = create_surface(&entry, &instance, window);

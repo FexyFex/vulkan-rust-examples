@@ -1,5 +1,4 @@
 use std::ptr::{null};
-use ash::version::DeviceV1_0;
 use ash::vk;
 use ash::vk::Bool32;
 use crate::vulkan_core::{QueueFamily, SurfaceInfo};
