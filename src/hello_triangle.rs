@@ -1,7 +1,17 @@
+use std::path::Path;
 use std::ptr::{null, null_mut};
 use ash::vk;
 use crate::render_app;
+use crate::util::read_shader_code;
+use crate::vulkan_core::pipeline::{create_pipeline, GraphicsPipeline, GraphicsPipelineConfiguration, PushConstantsLayout};
 use crate::vulkan_render_base::{FramePreparation, FrameSubmitData, VulkanRenderBase};
+
+
+struct HelloTriangle {
+    pub pipeline: GraphicsPipeline
+}
+
+static mut HELLO_TRIANGLE: Option<HelloTriangle> = None;
 
 pub fn main() {
     let render_app = render_app::run_app();
@@ -12,7 +22,30 @@ pub fn main() {
 }
 
 fn prepare_vulkan(vulkan_base: &VulkanRenderBase) {
+    // Pipeline creation
+    let pipeline_config = GraphicsPipelineConfiguration {
+        vertex_attributes: vec![],
+        vertex_shader_code: read_shader_code(Path::new("shaders/hello_triangle/vert.spv")),
+        fragment_shader_code: read_shader_code(Path::new("shaders/hello_triangle/frag.spv")),
+        set_layouts: Vec::new(),
+        push_constants_layout: PushConstantsLayout {
+            size_bytes: 64,
+            offset: 0,
+            shader_stages: vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
+        },
+        spec_constants: vec![],
+        primitive_topology: vk::PrimitiveTopology::TRIANGLE_LIST,
+        polygon_mode: vk::PolygonMode::FILL,
+        cull_mode: vk::CullModeFlags::BACK,
+        multisampling: vk::SampleCountFlags::TYPE_1,
+        blend_enable: false,
+        depth_test: false,
+        depth_write: false,
+    };
 
+    let pipeline = create_pipeline(&vulkan_base.device, &pipeline_config);
+
+    unsafe { HELLO_TRIANGLE = Some(HelloTriangle { pipeline }) };
 }
 
 pub fn record_command_buffer(vulkan_base: &VulkanRenderBase, prep: FramePreparation) -> FrameSubmitData {
@@ -33,7 +66,7 @@ pub fn record_command_buffer(vulkan_base: &VulkanRenderBase, prep: FramePreparat
     let swapchain_image_view = vulkan_base.swapchain.image_views[prep.image_index as usize];
 
     let clear_color = vk::ClearValue { color: vk::ClearColorValue { float32: [0.2, 0.2, 0.2, 0.2] } };
-    let clear_depth = vk::ClearValue { depth_stencil: vk::ClearDepthStencilValue { depth: 0.0, stencil: 0 } };
+    //let clear_depth = vk::ClearValue { depth_stencil: vk::ClearDepthStencilValue { depth: 0.0, stencil: 0 } };
 
     let color_attachment_info = vk::RenderingAttachmentInfo {
         s_type: vk::StructureType::RENDERING_ATTACHMENT_INFO,
@@ -100,8 +133,17 @@ pub fn record_command_buffer(vulkan_base: &VulkanRenderBase, prep: FramePreparat
             min_depth: 0.0, max_depth: 1.0,
         };
 
+        let pipeline = &HELLO_TRIANGLE.as_ref().unwrap().pipeline;
+        let push_constants: [u8; 64] = [0; 64];
+
         vulkan_base.device.cmd_set_viewport(command_buffer, 0, &[viewport]);
         vulkan_base.device.cmd_set_scissor(command_buffer, 0, &[render_area]);
+        vulkan_base.device.cmd_bind_pipeline(command_buffer, vk::PipelineBindPoint::GRAPHICS, pipeline.handle);
+        vulkan_base.device.cmd_push_constants(
+            command_buffer, pipeline.layout_handle,
+            vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT, 0, &push_constants
+        );
+        vulkan_base.device.cmd_draw(command_buffer, 3, 1, 0, 0);
 
         vulkan_base.device.cmd_end_rendering(command_buffer);
 

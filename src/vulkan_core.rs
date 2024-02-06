@@ -7,8 +7,9 @@ pub mod cmd;
 pub mod descriptor;
 pub mod sync;
 pub mod pipeline;
+pub mod render_pass;
 
-use std::ffi::{c_void, CStr, CString};
+use std::ffi::{c_char, c_void, CStr, CString};
 use std::iter::Iterator;
 use std::ops::BitOr;
 use std::ptr::{null, null_mut};
@@ -17,6 +18,7 @@ use ash::vk::{QueueFlags};
 use crate::vulkan_core::debug::debug_callback;
 
 
+//const REQUIRED_INSTANCE_LAYERS: [&str; 2] = ["VK_LAYER_KHRONOS_validation", "VK_LAYER_LUNARG_api_dump"];
 const REQUIRED_INSTANCE_LAYERS: [&str; 1] = ["VK_LAYER_KHRONOS_validation"];
 const REQUIRED_INSTANCE_EXTENSIONS: [&str; 4] = [
     "VK_EXT_debug_utils",
@@ -26,8 +28,8 @@ const REQUIRED_INSTANCE_EXTENSIONS: [&str; 4] = [
 ];
 const REQUIRED_DEVICE_EXTENSIONS: [&str; 4] = [
     "VK_KHR_swapchain",
-    "VK_KHR_dynamic_rendering",
     "VK_EXT_descriptor_indexing",
+    "VK_KHR_dynamic_rendering",
     "VK_KHR_depth_stencil_resolve"
 ];
 
@@ -43,7 +45,7 @@ pub fn create_instance(entry: &ash::Entry) -> ash::Instance {
         application_version: vk::make_version(0, 0, 1),
         p_engine_name: p_engine_name.as_ptr(),
         engine_version: vk::make_version(0, 0, 1),
-        api_version: vk::make_api_version(0, 1, 3, 0),
+        api_version: vk::make_api_version(0, 1, 3, 1),
     };
 
     // Instance Layers
@@ -195,10 +197,10 @@ pub fn create_device(instance: &ash::Instance, physical_device: vk::PhysicalDevi
             println!("MISSING DEVICE EXTENSION: {}", extension);
         }
     }
-    let mut extension_c_names = available_extensions.iter()
+    let mut extension_c_names: Vec<*const c_char> = available_extensions.iter()
         .filter(|e| unsafe { REQUIRED_DEVICE_EXTENSIONS.contains(&CStr::from_ptr(e.extension_name.as_ptr()).to_str().unwrap()) })
         .map(|e| e.extension_name.as_ptr())
-        .collect::<Vec<_>>();
+        .collect::<Vec<*const c_char>>();
     unsafe { extension_c_names.set_len(REQUIRED_DEVICE_EXTENSIONS.len()) };
 
     let base_device_features = vk::PhysicalDeviceFeatures::builder()
@@ -207,13 +209,13 @@ pub fn create_device(instance: &ash::Instance, physical_device: vk::PhysicalDevi
         .multi_draw_indirect(true)
         .build();
 
-    let mut dynamic_rendering = vk::PhysicalDeviceDynamicRenderingFeatures::builder()
+    let features_vk13 = vk::PhysicalDeviceVulkan13Features::builder()
         .dynamic_rendering(true)
         .build();
 
     let device_create_info = vk::DeviceCreateInfo {
         s_type: vk::StructureType::DEVICE_CREATE_INFO,
-        p_next: &mut dynamic_rendering as *mut _ as *mut c_void,
+        p_next: &features_vk13 as *const _ as *const c_void,
         flags: vk::DeviceCreateFlags::empty(),
         queue_create_info_count: queue_create_infos.len() as u32,
         p_queue_create_infos: queue_create_infos.as_ptr(),
