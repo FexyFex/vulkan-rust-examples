@@ -52,7 +52,7 @@ impl RenderApp {
     }
 }
 
-pub fn run_app() -> RenderApp {
+pub fn create_app() -> RenderApp {
     let event_loop = EventLoop::new();
     let winit_window: winit::window::Window = WindowBuilder::new()
         .with_title("Vulkan Stuff")
@@ -61,6 +61,7 @@ pub fn run_app() -> RenderApp {
         .with_transparent(false)
         .build(&event_loop).unwrap();
 
+    println!("PID: {}", std::process::id());
     let base = initialize_vulkan(&winit_window, 3);
 
     return RenderApp { event_loop, window: winit_window, vulkan_base: base };

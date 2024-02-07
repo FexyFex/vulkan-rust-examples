@@ -9,7 +9,8 @@ pub struct SwapchainInfo {
     pub loader: ash::extensions::khr::Swapchain,
     pub extent: vk::Extent2D,
     pub images: Vec<vk::Image>,
-    pub image_views: Vec<vk::ImageView>
+    pub image_views: Vec<vk::ImageView>,
+    pub color_format: vk::Format,
 }
 
 
@@ -95,7 +96,8 @@ pub fn create_swapchain(
         loader: swapchain_loader,
         extent: capabilities.min_image_extent,
         images,
-        image_views
+        image_views,
+        color_format: surface_format.format
     }
 }
 

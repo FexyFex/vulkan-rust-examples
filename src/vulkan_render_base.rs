@@ -5,6 +5,7 @@ use ash::vk;
 use ash::vk::QueueFlags;
 use crate::vulkan_core;
 use crate::vulkan_core::{create_device, create_physical_device, create_surface, get_unique_queue_families, QueueFamily, SurfaceInfo};
+use crate::vulkan_core::buffer_factory::{VulkanBuffer, VulkanBufferConfiguration};
 use crate::vulkan_core::cmd::{create_command_buffer, create_command_pool};
 use crate::vulkan_core::sync::{create_fence, create_semaphore};
 use crate::vulkan_core::swapchain::{create_swapchain, SwapchainInfo};
@@ -27,6 +28,8 @@ pub struct VulkanRenderBase {
     pub device: ash::Device,
     pub surface: SurfaceInfo,
     pub swapchain: SwapchainInfo,
+
+    pub memory_properties: vk::PhysicalDeviceMemoryProperties,
 
     pub unique_queue_families: Vec<QueueFamily>,
     pub graphics_queue_family: QueueFamily,
@@ -127,6 +130,14 @@ impl VulkanRenderBase {
         self.frame_in_flight_index = (self.frame_in_flight_index + 1) % self.frames_in_flight;
     }}
 
+    pub fn create_buffer(&self, buffer_config: &VulkanBufferConfiguration) -> VulkanBuffer {
+        return vulkan_core::buffer_factory::create_buffer(
+            &self.device,
+            &self.memory_properties,
+            buffer_config
+        );
+    }
+
     pub fn resize_swapchain(&mut self) {
         unsafe { self.device.device_wait_idle().expect("MEH") };
 
@@ -155,6 +166,9 @@ pub fn initialize_vulkan(window: &winit::window::Window, buffering_strategy: u32
     let instance = vulkan_core::create_instance(&entry);
     let surface_info = create_surface(&entry, &instance, window);
     let physical_device = create_physical_device(&instance);
+
+    let memory_properties = unsafe { instance.get_physical_device_memory_properties(physical_device) };
+
     let unique_queue_families = get_unique_queue_families(&instance, &surface_info, physical_device);
     let device = create_device(&instance, physical_device, &unique_queue_families);
 
@@ -195,6 +209,7 @@ pub fn initialize_vulkan(window: &winit::window::Window, buffering_strategy: u32
     return VulkanRenderBase {
         instance, physical_device, device,
         surface: surface_info, swapchain,
+        memory_properties,
         unique_queue_families, graphics_queue_family, present_queue_family,
         graphics_queue, compute_queue, present_queue,
         command_pool: command_pool.clone(), command_buffers: command_buffers.clone(),

@@ -8,6 +8,8 @@ pub mod descriptor;
 pub mod sync;
 pub mod pipeline;
 pub mod render_pass;
+pub mod buffer_factory;
+pub mod tools;
 
 use std::ffi::{c_char, c_void, CStr, CString};
 use std::iter::Iterator;
@@ -26,17 +28,28 @@ const REQUIRED_INSTANCE_EXTENSIONS: [&str; 4] = [
     "VK_KHR_surface",
     "VK_KHR_win32_surface"
 ];
-const REQUIRED_DEVICE_EXTENSIONS: [&str; 4] = [
+const REQUIRED_DEVICE_EXTENSIONS: [&str; 2] = [
     "VK_KHR_swapchain",
     "VK_EXT_descriptor_indexing",
-    "VK_KHR_dynamic_rendering",
-    "VK_KHR_depth_stencil_resolve"
+  //  "VK_KHR_dynamic_rendering",
+   // "VK_KHR_depth_stencil_resolve",
+  //  "VK_KHR_synchronization2"
 ];
 
 
 pub fn create_instance(entry: &ash::Entry) -> ash::Instance {
     let p_application_name = CString::new("vulkan-rust-example").unwrap();
     let p_engine_name = CString::new("FexEngine_Rust_Variant").unwrap();
+
+    let (major, minor) = match entry.try_enumerate_instance_version().expect("MEH") {
+        // Vulkan 1.1+
+        Some(version) => (
+            vk::api_version_major(version),
+            vk::api_version_minor(version),
+        ),
+        // Vulkan 1.0
+        None => (1, 0),
+    };
 
     let app_info = vk::ApplicationInfo {
         s_type: vk::StructureType::APPLICATION_INFO,
@@ -45,7 +58,7 @@ pub fn create_instance(entry: &ash::Entry) -> ash::Instance {
         application_version: vk::make_version(0, 0, 1),
         p_engine_name: p_engine_name.as_ptr(),
         engine_version: vk::make_version(0, 0, 1),
-        api_version: vk::make_api_version(0, 1, 3, 1),
+        api_version: vk::make_api_version(0, major, minor, 0),
     };
 
     // Instance Layers
@@ -80,8 +93,7 @@ pub fn create_instance(entry: &ash::Entry) -> ash::Instance {
 
     let message_type = vk::DebugUtilsMessageTypeFlagsEXT::VALIDATION |
             vk::DebugUtilsMessageTypeFlagsEXT::GENERAL |
-            vk::DebugUtilsMessageTypeFlagsEXT::PERFORMANCE |
-            vk::DebugUtilsMessageTypeFlagsEXT::DEVICE_ADDRESS_BINDING;
+            vk::DebugUtilsMessageTypeFlagsEXT::PERFORMANCE;
 
     let mut debug_create_info: vk::DebugUtilsMessengerCreateInfoEXT = vk::DebugUtilsMessengerCreateInfoEXT {
         s_type: vk::StructureType::DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
@@ -118,6 +130,12 @@ pub fn create_physical_device(instance: &ash::Instance) -> vk::PhysicalDevice {
     let physical_devices = unsafe { instance.enumerate_physical_devices().expect("MEH") };
 
     // to do: Choose a VkPhysicalDevice based on their properties and available features
+    let _device_scores = [physical_devices.len() as i32; 0];
+
+    //for physical_device in physical_devices {
+    //    let properties = unsafe { instance.get_physical_device_properties(physical_device) };
+    //    let features = unsafe { instance.get_physical_device_features(physical_device) };
+    //}
     let physical_device = physical_devices[0];
 
     let physical_device_properties = unsafe { instance.get_physical_device_properties(physical_device) };
@@ -209,13 +227,15 @@ pub fn create_device(instance: &ash::Instance, physical_device: vk::PhysicalDevi
         .multi_draw_indirect(true)
         .build();
 
-    let features_vk13 = vk::PhysicalDeviceVulkan13Features::builder()
+    let mut features_vk13 = vk::PhysicalDeviceVulkan13Features::builder()
         .dynamic_rendering(true)
-        .build();
+        .synchronization2(true);
+
+    let mut features2 = vk::PhysicalDeviceFeatures2::builder().push_next(&mut features_vk13);
 
     let device_create_info = vk::DeviceCreateInfo {
         s_type: vk::StructureType::DEVICE_CREATE_INFO,
-        p_next: &features_vk13 as *const _ as *const c_void,
+        p_next: &mut features2 as *mut _ as *mut c_void,
         flags: vk::DeviceCreateFlags::empty(),
         queue_create_info_count: queue_create_infos.len() as u32,
         p_queue_create_infos: queue_create_infos.as_ptr(),
@@ -223,7 +243,7 @@ pub fn create_device(instance: &ash::Instance, physical_device: vk::PhysicalDevi
         pp_enabled_layer_names: null(),
         enabled_extension_count: extension_c_names.len() as u32,
         pp_enabled_extension_names: extension_c_names.as_ptr(),
-        p_enabled_features: &base_device_features,
+        p_enabled_features: null(),
     };
 
     let device = unsafe {

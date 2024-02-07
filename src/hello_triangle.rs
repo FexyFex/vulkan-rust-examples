@@ -2,19 +2,21 @@ use std::path::Path;
 use std::ptr::{null, null_mut};
 use ash::vk;
 use crate::render_app;
-use crate::util::read_shader_code;
+use crate::vulkan_core::buffer_factory::{VulkanBuffer, VulkanBufferConfiguration};
 use crate::vulkan_core::pipeline::{create_pipeline, GraphicsPipeline, GraphicsPipelineConfiguration, PushConstantsLayout};
+use crate::vulkan_core::tools::read_shader_code;
 use crate::vulkan_render_base::{FramePreparation, FrameSubmitData, VulkanRenderBase};
 
 
 struct HelloTriangle {
-    pub pipeline: GraphicsPipeline
+    pub pipeline: GraphicsPipeline,
+    pub vertex_buffer: VulkanBuffer,
 }
 
 static mut HELLO_TRIANGLE: Option<HelloTriangle> = None;
 
 pub fn main() {
-    let render_app = render_app::run_app();
+    let render_app = render_app::create_app();
 
     prepare_vulkan(&render_app.vulkan_base);
 
@@ -27,6 +29,8 @@ fn prepare_vulkan(vulkan_base: &VulkanRenderBase) {
         vertex_attributes: vec![],
         vertex_shader_code: read_shader_code(Path::new("shaders/hello_triangle/vert.spv")),
         fragment_shader_code: read_shader_code(Path::new("shaders/hello_triangle/frag.spv")),
+        color_format: vulkan_base.swapchain.color_format,
+        depth_format: vk::Format::D32_SFLOAT,
         set_layouts: Vec::new(),
         push_constants_layout: PushConstantsLayout {
             size_bytes: 64,
@@ -45,7 +49,15 @@ fn prepare_vulkan(vulkan_base: &VulkanRenderBase) {
 
     let pipeline = create_pipeline(&vulkan_base.device, &pipeline_config);
 
-    unsafe { HELLO_TRIANGLE = Some(HelloTriangle { pipeline }) };
+    // Vertex Buffer creation
+    let vertex_buffer_config = VulkanBufferConfiguration {
+        size: 64,
+        memory_property_flags: vk::MemoryPropertyFlags::DEVICE_LOCAL,
+        buffer_usage: vk::BufferUsageFlags::VERTEX_BUFFER | vk::BufferUsageFlags::TRANSFER_DST
+    };
+    let vertex_buffer = vulkan_base.create_buffer(&vertex_buffer_config);
+
+    unsafe { HELLO_TRIANGLE = Some(HelloTriangle { pipeline, vertex_buffer }) };
 }
 
 pub fn record_command_buffer(vulkan_base: &VulkanRenderBase, prep: FramePreparation) -> FrameSubmitData {
@@ -133,7 +145,9 @@ pub fn record_command_buffer(vulkan_base: &VulkanRenderBase, prep: FramePreparat
             min_depth: 0.0, max_depth: 1.0,
         };
 
-        let pipeline = &HELLO_TRIANGLE.as_ref().unwrap().pipeline;
+        let hello_triangle = &HELLO_TRIANGLE.as_ref().unwrap();
+        let pipeline = &hello_triangle.pipeline;
+        let vertex_buffer = &hello_triangle.vertex_buffer;
         let push_constants: [u8; 64] = [0; 64];
 
         vulkan_base.device.cmd_set_viewport(command_buffer, 0, &[viewport]);
@@ -143,6 +157,7 @@ pub fn record_command_buffer(vulkan_base: &VulkanRenderBase, prep: FramePreparat
             command_buffer, pipeline.layout_handle,
             vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT, 0, &push_constants
         );
+        vulkan_base.device.cmd_bind_vertex_buffers(command_buffer, 0, &[vertex_buffer.handle], &[0]);
         vulkan_base.device.cmd_draw(command_buffer, 3, 1, 0, 0);
 
         vulkan_base.device.cmd_end_rendering(command_buffer);
