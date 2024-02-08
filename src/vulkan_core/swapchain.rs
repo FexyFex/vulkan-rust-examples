@@ -60,26 +60,20 @@ pub fn create_swapchain(
     let surface_format = choose_surface_format(&formats);
     let present_mode = choose_present_mode(present_modes);
 
-    let swapchain_create_info = vk::SwapchainCreateInfoKHR {
-        s_type: vk::StructureType::SWAPCHAIN_CREATE_INFO_KHR,
-        p_next: null(),
-        flags: vk::SwapchainCreateFlagsKHR::empty(),
-        surface: surface.handle,
-        min_image_count: images_total,
-        image_format: surface_format.format,
-        image_color_space: surface_format.color_space,
-        image_extent: vk::Extent2D { width: capabilities.min_image_extent.width, height: capabilities.min_image_extent.height },
-        image_array_layers: 1,
-        image_usage: vk::ImageUsageFlags::COLOR_ATTACHMENT | vk::ImageUsageFlags::TRANSFER_DST,
-        image_sharing_mode,
-        queue_family_index_count: queue_family_indices.len() as u32,
-        p_queue_family_indices: queue_family_indices.as_ptr(),
-        pre_transform,
-        composite_alpha: vk::CompositeAlphaFlagsKHR::OPAQUE,
-        present_mode,
-        clipped: Bool32::from(true),
-        old_swapchain: vk::SwapchainKHR::null()
-    };
+    let swapchain_create_info = vk::SwapchainCreateInfoKHR::builder()
+        .surface(surface.handle)
+        .min_image_count(images_total)
+        .image_format(surface_format.format)
+        .image_color_space(surface_format.color_space)
+        .image_extent(vk::Extent2D { width: capabilities.min_image_extent.width, height: capabilities.min_image_extent.height })
+        .image_array_layers(1)
+        .image_usage(vk::ImageUsageFlags::COLOR_ATTACHMENT | vk::ImageUsageFlags::TRANSFER_DST)
+        .image_sharing_mode(image_sharing_mode)
+        .queue_family_indices(&queue_family_indices)
+        .pre_transform(pre_transform)
+        .composite_alpha(vk::CompositeAlphaFlagsKHR::OPAQUE)
+        .present_mode(present_mode)
+        .clipped(true);
 
     let swapchain_loader = ash::extensions::khr::Swapchain::new(instance, device);
     let swapchain_handle = unsafe {
@@ -131,40 +125,24 @@ fn create_images(swapchain_handle: vk::SwapchainKHR, swapchain_loader: &ash::ext
 }
 
 fn create_image_views(device: &ash::Device, images: &Vec<vk::Image>, color_format: vk::Format) -> Vec<vk::ImageView> {
-    let mut image_views: Vec<vk::ImageView> = Vec::new();
+    let image_views = images
+        .iter()
+        .map(|current_image| {
+            let image_view_info = vk::ImageViewCreateInfo::builder()
+                .image(*current_image)
+                .view_type(vk::ImageViewType::TYPE_2D)
+                .format(color_format)
+                .subresource_range(vk::ImageSubresourceRange {
+                    aspect_mask: vk::ImageAspectFlags::COLOR,
+                    base_mip_level: 0,
+                    level_count: 1,
+                    base_array_layer: 0,
+                    layer_count: 1,
+                });
 
-    for current_image in images {
-        let image_view_info = vk::ImageViewCreateInfo {
-            s_type: vk::StructureType::IMAGE_VIEW_CREATE_INFO,
-            p_next: null(),
-            flags: vk::ImageViewCreateFlags::empty(),
-            image: *current_image,
-            view_type: vk::ImageViewType::TYPE_2D,
-            format: color_format,
-            components: vk::ComponentMapping {
-                r: vk::ComponentSwizzle::IDENTITY,
-                g: vk::ComponentSwizzle::IDENTITY,
-                b: vk::ComponentSwizzle::IDENTITY,
-                a: vk::ComponentSwizzle::IDENTITY,
-            },
-            subresource_range: vk::ImageSubresourceRange {
-                aspect_mask: vk::ImageAspectFlags::COLOR,
-                base_mip_level: 0,
-                level_count: 1,
-                base_array_layer: 0,
-                layer_count: 1
-            }
-        };
-
-        let image_view_handle = unsafe {
-            device
-                .create_image_view(&image_view_info, None)
-                .expect("MEH")
-        };
-        image_views.push(image_view_handle);
-    }
-
-    unsafe { image_views.set_len(images.len()) };
+            return unsafe { device.create_image_view(&image_view_info, None).expect("MEH") };
+        })
+        .collect::<Vec<vk::ImageView>>();
 
     return image_views;
 }

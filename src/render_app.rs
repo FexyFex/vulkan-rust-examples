@@ -39,10 +39,12 @@ impl RenderApp {
                     }
 
                     winit::event::WindowEvent::KeyboardInput { input, .. } => {
+                        /*
                         match input.virtual_keycode.unwrap() {
                             winit::event::VirtualKeyCode::Escape => *control_flow = ControlFlow::Exit,
                             _ => ()
                         }
+                         */
                     }
                     _ => ()
                 }

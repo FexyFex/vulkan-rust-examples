@@ -216,7 +216,7 @@ pub fn create_pipeline(device: &ash::Device, config: &GraphicsPipelineConfigurat
         .viewport_state(&viewport_state_info)
         .rasterization_state(&rasterization_state_info)
         .multisample_state(&multisample_state_info)
-        .depth_stencil_state(&depth_stencil_state_info)
+        //.depth_stencil_state(&depth_stencil_state_info)
         .color_blend_state(&color_blend_state_info)
         .dynamic_state(&dynamic_states_info)
         //.push_next(&mut dynamic_rendering_state_info)

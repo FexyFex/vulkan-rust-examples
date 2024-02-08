@@ -78,7 +78,7 @@ impl VulkanRenderBase {
         if !out_of_date {
             return FramePreparation { acquire_successful: true, image_index };
         }
-
+        println!("BBBB");
         panic!()
     }}
 
@@ -188,7 +188,7 @@ pub fn initialize_vulkan(window: &winit::window::Window, buffering_strategy: u32
         &graphics_queue_family, &present_queue_family
     );
 
-    let command_pool = create_command_pool(&device, graphics_queue_family);
+    let command_pool = create_command_pool(&device, &graphics_queue_family);
     let mut command_buffers: Vec<vk::CommandBuffer> = Vec::new();
     let mut image_available_semaphores: Vec<vk::Semaphore> = Vec::new();
     let mut render_finished_semaphores: Vec<vk::Semaphore> = Vec::new();

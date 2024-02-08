@@ -14,7 +14,6 @@ pub mod tools;
 use std::ffi::{c_char, c_void, CStr, CString};
 use std::iter::Iterator;
 use std::ops::BitOr;
-use std::ptr::{null, null_mut};
 use ash::*;
 use ash::vk::{QueueFlags};
 use crate::vulkan_core::debug::debug_callback;
@@ -22,11 +21,12 @@ use crate::vulkan_core::debug::debug_callback;
 
 //const REQUIRED_INSTANCE_LAYERS: [&str; 2] = ["VK_LAYER_KHRONOS_validation", "VK_LAYER_LUNARG_api_dump"];
 const REQUIRED_INSTANCE_LAYERS: [&str; 1] = ["VK_LAYER_KHRONOS_validation"];
-const REQUIRED_INSTANCE_EXTENSIONS: [&str; 4] = [
+const REQUIRED_INSTANCE_EXTENSIONS: [&str; 5] = [
     "VK_EXT_debug_utils",
     "VK_EXT_debug_report",
     "VK_KHR_surface",
-    "VK_KHR_win32_surface"
+    "VK_KHR_win32_surface",
+    "VK_EXT_validation_features"
 ];
 const REQUIRED_DEVICE_EXTENSIONS: [&str; 2] = [
     "VK_KHR_swapchain",
@@ -38,8 +38,8 @@ const REQUIRED_DEVICE_EXTENSIONS: [&str; 2] = [
 
 
 pub fn create_instance(entry: &ash::Entry) -> ash::Instance {
-    let p_application_name = CString::new("vulkan-rust-example").unwrap();
-    let p_engine_name = CString::new("FexEngine_Rust_Variant").unwrap();
+    let application_name = CString::new("vulkan-rust-example").unwrap();
+    let engine_name = CString::new("FexEngine_Rust_Variant").unwrap();
 
     let (major, minor) = match entry.try_enumerate_instance_version().expect("MEH") {
         // Vulkan 1.1+
@@ -51,15 +51,12 @@ pub fn create_instance(entry: &ash::Entry) -> ash::Instance {
         None => (1, 0),
     };
 
-    let app_info = vk::ApplicationInfo {
-        s_type: vk::StructureType::APPLICATION_INFO,
-        p_next: null(),
-        p_application_name: p_application_name.as_ptr(),
-        application_version: vk::make_version(0, 0, 1),
-        p_engine_name: p_engine_name.as_ptr(),
-        engine_version: vk::make_version(0, 0, 1),
-        api_version: vk::make_api_version(0, major, minor, 0),
-    };
+    let app_info = vk::ApplicationInfo::builder()
+        .application_name(&application_name)
+        .application_version(vk::make_version(0, 0, 1))
+        .engine_name(&engine_name)
+        .engine_version(vk::make_version(0, 0, 1))
+        .api_version(vk::make_api_version(0, major, minor, 0));
 
     // Instance Layers
     let layers = entry.enumerate_instance_layer_properties().expect("MEH");
@@ -95,26 +92,23 @@ pub fn create_instance(entry: &ash::Entry) -> ash::Instance {
             vk::DebugUtilsMessageTypeFlagsEXT::GENERAL |
             vk::DebugUtilsMessageTypeFlagsEXT::PERFORMANCE;
 
-    let mut debug_create_info: vk::DebugUtilsMessengerCreateInfoEXT = vk::DebugUtilsMessengerCreateInfoEXT {
-        s_type: vk::StructureType::DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
-        p_next: null(),
-        flags: vk::DebugUtilsMessengerCreateFlagsEXT::empty(),
-        message_severity: vk::DebugUtilsMessageSeverityFlagsEXT::WARNING | vk::DebugUtilsMessageSeverityFlagsEXT::ERROR,
-        message_type,
-        pfn_user_callback: Some(debug_callback),
-        p_user_data: null_mut(),
-    };
+    let mut debug_create_info = vk::DebugUtilsMessengerCreateInfoEXT::builder()
+        .message_severity(vk::DebugUtilsMessageSeverityFlagsEXT::WARNING | vk::DebugUtilsMessageSeverityFlagsEXT::ERROR)
+        .message_type(message_type)
+        .pfn_user_callback(Some(debug_callback));
 
-    let instance_create_info = vk::InstanceCreateInfo {
-        s_type: vk::StructureType::INSTANCE_CREATE_INFO,
-        p_next: &mut debug_create_info as *mut _ as *mut c_void,
-        flags: vk::InstanceCreateFlags::empty(),
-        p_application_info: &app_info,
-        enabled_layer_count: layer_c_names.len() as u32,
-        pp_enabled_layer_names: layer_c_names.as_ptr(),
-        enabled_extension_count: extension_c_names.len() as u32,
-        pp_enabled_extension_names: extension_c_names.as_ptr(),
-    };
+    let mut enabled_validation_features = [
+        vk::ValidationFeatureEnableEXT::GPU_ASSISTED, vk::ValidationFeatureEnableEXT::SYNCHRONIZATION_VALIDATION
+    ];
+    let mut validation_features_info = vk::ValidationFeaturesEXT::builder()
+        .enabled_validation_features(&enabled_validation_features);
+    validation_features_info.p_next = &mut debug_create_info as *mut _ as *mut c_void;
+
+    let instance_create_info = vk::InstanceCreateInfo::builder()
+        .application_info(&app_info)
+        .enabled_layer_names(&layer_c_names)
+        .enabled_extension_names(&extension_c_names)
+        .push_next(&mut validation_features_info);
 
     let instance_handle = unsafe {
         entry
@@ -185,18 +179,14 @@ pub fn get_unique_queue_families(instance: &ash::Instance, surface: &SurfaceInfo
 
 pub fn create_device(instance: &ash::Instance, physical_device: vk::PhysicalDevice, unique_queue_families: &Vec<QueueFamily>) -> ash::Device {
     let queue_count = unique_queue_families.len();
-    let queue_priority: f32 = 1.0;
+    let queue_priorities = [1.0];
     let mut queue_create_infos: Vec<vk::DeviceQueueCreateInfo> = Vec::new();
     for i in 0..queue_count {
         let queue_family = unique_queue_families.get(i).unwrap();
-        let create_info = vk::DeviceQueueCreateInfo {
-            s_type: vk::StructureType::DEVICE_QUEUE_CREATE_INFO,
-            p_next: null(),
-            flags: vk::DeviceQueueCreateFlags::empty(),
-            queue_family_index: queue_family.index,
-            queue_count: 1,
-            p_queue_priorities: &queue_priority,
-        };
+        let create_info = vk::DeviceQueueCreateInfo::builder()
+            .queue_family_index(queue_family.index)
+            .queue_priorities(&queue_priorities)
+            .build();
 
         queue_create_infos.push(create_info);
     }
@@ -233,18 +223,10 @@ pub fn create_device(instance: &ash::Instance, physical_device: vk::PhysicalDevi
 
     let mut features2 = vk::PhysicalDeviceFeatures2::builder().push_next(&mut features_vk13);
 
-    let device_create_info = vk::DeviceCreateInfo {
-        s_type: vk::StructureType::DEVICE_CREATE_INFO,
-        p_next: &mut features2 as *mut _ as *mut c_void,
-        flags: vk::DeviceCreateFlags::empty(),
-        queue_create_info_count: queue_create_infos.len() as u32,
-        p_queue_create_infos: queue_create_infos.as_ptr(),
-        enabled_layer_count: 0,
-        pp_enabled_layer_names: null(),
-        enabled_extension_count: extension_c_names.len() as u32,
-        pp_enabled_extension_names: extension_c_names.as_ptr(),
-        p_enabled_features: null(),
-    };
+    let device_create_info = vk::DeviceCreateInfo::builder()
+        .queue_create_infos(&queue_create_infos)
+        .enabled_extension_names(&extension_c_names)
+        .push_next(&mut features2);
 
     let device = unsafe {
         instance
